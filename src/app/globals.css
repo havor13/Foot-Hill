@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/* Foothill palette: spruce-teal ground, one sunrise-gold highlight. */
+:root {
+  --bg: #eef3f4;
+  --surface: #ffffff;
+  --surface2: #e4ecee;
+  --ink: #13242b;
+  --muted: #56707a;
+  --line: #d3dfe2;
+  --accent: #0e6b66;
+  --accent-ink: #ffffff;
+  --accent-soft: #d5ecE9;
+  --sun: #e9a02a;
+  --sun-soft: #fbebcb;
+  --danger: #b3402e;
+  --bubble-me: #d5ece9;
+  --wall: #e6eef0;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c1619;
+    --surface: #142126;
+    --surface2: #1b2c32;
+    --ink: #e6f0f1;
+    --muted: #8fa9b1;
+    --line: #25383f;
+    --accent: #4cc2b8;
+    --accent-ink: #06201e;
+    --accent-soft: #16363a;
+    --sun: #f4b650;
+    --sun-soft: #3a2d14;
+    --danger: #f08a78;
+    --bubble-me: #14504f;
+    --wall: #0f1c20;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-sun: var(--sun);
+  --color-sun-soft: var(--sun-soft);
+  --color-danger: var(--danger);
+  --color-bubble-me: var(--bubble-me);
+  --color-wall: var(--wall);
+  --font-display: var(--f-display), "Trebuchet MS", system-ui, sans-serif;
+  --font-sans: var(--f-body), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-line bg-surface px-4 py-1.5 text-sm font-semibold transition hover:bg-surface2 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent text-accent-ink hover:bg-accent hover:brightness-110;
+  }
+  .btn-on {
+    @apply border-accent bg-accent-soft text-accent;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-surface p-4;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-bg px-3 py-2 text-[15px];
+  }
+  .chip {
+    @apply inline-flex shrink-0 items-center rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm font-semibold text-muted transition hover:text-ink;
+  }
+  .chip[aria-current="true"] {
+    @apply border-ink bg-ink text-bg;
+  }
+  .tag {
+    @apply inline-flex items-center rounded-full bg-surface2 px-2.5 py-0.5 text-xs text-muted;
+  }
+  .label {
+    @apply grid gap-1 text-[13px] font-semibold;
+  }
+  .page-title {
+    @apply text-3xl font-bold;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
