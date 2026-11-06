@@ -34,7 +34,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
       {groups.length ? (
         <>
-          <Composer groups={groups} defaultGroupId={filterId} />
+          <Composer groups={groups} defaultGroupId={filterId} userId={user.id} userName={user.name} />
           <div className="flex gap-2 overflow-x-auto pb-1" role="navigation" aria-label="Filter by group">
             <Link href="/feed" className="chip" aria-current={!filterId}>
               All my groups

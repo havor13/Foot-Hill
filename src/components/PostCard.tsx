@@ -2,6 +2,9 @@ import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/SubmitButton";
 import { addComment, deletePost, toggleLike } from "@/app/(app)/actions";
+import AttachmentList from "@/components/AttachmentList";
+import { attachmentSelect } from "@/lib/uploads.server";
+import type { AttachmentView } from "@/lib/uploads";
 import { timeAgo } from "@/lib/format";
 
 export type PostView = {
@@ -11,6 +14,7 @@ export type PostView = {
   author: { id: string; name: string; major: string | null };
   group: { id: string; name: string; kind: "GROUP" | "COURSE" };
   _count: { likes: number; comments: number };
+  attachments: AttachmentView[];
   likes: { userId: string }[]; // already filtered to the signed-in user
   comments: { id: string; body: string; createdAt: Date; author: { name: string } }[];
 };
@@ -59,7 +63,8 @@ export default function PostCard({
         </Link>
       )}
 
-      <p className="whitespace-pre-wrap break-words">{post.body}</p>
+      {post.body && <p className="whitespace-pre-wrap break-words">{post.body}</p>}
+      <AttachmentList items={post.attachments} />
 
       <div className="flex items-center gap-1 border-t border-line pt-2">
         <form action={toggleLike.bind(null, post.id)}>
@@ -121,6 +126,7 @@ export const postInclude = (userId: string) =>
     author: { select: { id: true, name: true, major: true } },
     group: { select: { id: true, name: true, kind: true } },
     _count: { select: { likes: true, comments: true } },
+    attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
     likes: { where: { userId }, select: { userId: true } },
     comments: {
       orderBy: { createdAt: "asc" },

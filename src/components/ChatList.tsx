@@ -4,6 +4,7 @@ import { unreadByConversation } from "@/lib/chat";
 import { hue, initials, timeAgo } from "@/lib/format";
 import SubmitButton from "@/components/SubmitButton";
 import { createGroupChat } from "@/app/(app)/chat/actions";
+import { startDm } from "@/app/(app)/actions";
 
 export default async function ChatList({
   userId,
@@ -20,7 +21,11 @@ export default async function ChatList({
       include: {
         // Only a few other members are needed: the other person in a DM, or a preview for a group.
         members: { where: { userId: { not: userId } }, take: 3, include: { user: { select: { name: true } } } },
-        messages: { orderBy: { createdAt: "desc" }, take: 1, include: { sender: { select: { name: true } } } },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { sender: { select: { name: true } }, attachments: { select: { kind: true }, take: 1 } },
+        },
       },
     }),
     unreadByConversation(userId),
@@ -48,6 +53,27 @@ export default async function ChatList({
       <div className="flex items-center justify-between px-4 pt-4">
         <h1 className="text-2xl font-bold">Chat</h1>
       </div>
+
+      {canStartGroup && (
+        <details className="mx-4 rounded-xl border border-line" open={rows.length === 0}>
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-accent">New message</summary>
+          <ul className="max-h-52 overflow-y-auto border-t border-line">
+            {people.map((p) => (
+              <li key={p.id}>
+                <form action={startDm.bind(null, p.id)}>
+                  <button type="submit" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-surface2">
+                    <span className="truncate font-semibold">{p.name}</span>
+                    {p.major && <span className="truncate text-xs text-muted">{p.major}</span>}
+                  </button>
+                </form>
+              </li>
+            ))}
+            {!people.length && (
+              <li className="px-3 py-3 text-sm text-muted">No other students have joined yet. Invite a classmate to sign up.</li>
+            )}
+          </ul>
+        </details>
+      )}
 
       {canStartGroup && (
       <details className="mx-4 rounded-xl border border-line">
@@ -78,8 +104,11 @@ export default async function ChatList({
       <ul className="max-h-[60dvh] overflow-y-auto border-t border-line md:max-h-[calc(100dvh-13rem)]">
         {rows.map((r) => {
           const n = unread[r.id] ?? 0;
+          const lastText = r.last
+            ? r.last.body || (r.last.attachments[0]?.kind === "IMAGE" ? "Sent a photo" : "Sent a file")
+            : "";
           const preview = r.last
-            ? `${r.last.senderId === userId ? "You: " : r.isGroup ? `${r.last.sender.name.split(" ")[0]}: ` : ""}${r.last.body}`
+            ? `${r.last.senderId === userId ? "You: " : r.isGroup ? `${r.last.sender.name.split(" ")[0]}: ` : ""}${lastText}`
             : "No messages yet";
           return (
             <li key={r.id} className="border-b border-line last:border-0">

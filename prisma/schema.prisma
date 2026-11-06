@@ -50,6 +50,7 @@ model User {
   introsReceived IntroRequest[]       @relation("IntroTo")
   convMembers    ConversationMember[]
   messages       Message[]
+  attachments    Attachment[]
 }
 
 model VerificationCode {
@@ -117,6 +118,7 @@ model Post {
   group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   likes     Like[]
   comments  Comment[]
+  attachments Attachment[]
 
   @@index([groupId, createdAt])
 }
@@ -212,6 +214,32 @@ model Message {
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  attachments    Attachment[]
 
   @@index([conversationId, createdAt])
+}
+
+enum AttachmentKind {
+  IMAGE
+  FILE
+}
+
+/// A file stored in Vercel Blob and attached to either a post or a chat message.
+model Attachment {
+  id          String         @id @default(cuid())
+  url         String
+  name        String
+  contentType String
+  size        Int
+  kind        AttachmentKind
+  uploaderId  String
+  postId      String?
+  messageId   String?
+  createdAt   DateTime       @default(now())
+  uploader    User           @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  post        Post?          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  message     Message?       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([messageId])
 }

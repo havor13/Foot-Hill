@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
+import { attachmentRows, attachmentSelect, parseAttachments } from "@/lib/uploads.server";
+import type { AttachmentView } from "@/lib/uploads";
 
 export type ChatMsg = {
   id: string;
@@ -12,16 +14,25 @@ export type ChatMsg = {
   senderName: string;
   body: string;
   createdAt: string; // ISO string, safe to pass to the browser
+  attachments: AttachmentView[];
 };
 
 export type SendResult = { ok: true; message: ChatMsg } | { ok: false; error: string };
 
-const bodySchema = z.string().trim().min(1, "Write a message first.").max(2000, "Messages can be up to 2,000 characters.");
+const bodySchema = z.string().trim().max(2000, "Messages can be up to 2,000 characters.");
 
-export async function sendMessage(conversationId: string, rawBody: string): Promise<SendResult> {
+/** `rawAttachments` are files the browser already uploaded. They are re-checked here. */
+export async function sendMessage(
+  conversationId: string,
+  rawBody: string,
+  rawAttachments: unknown[] = [],
+): Promise<SendResult> {
   const user = await requireUser();
   const parsed = bodySchema.safeParse(rawBody);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not send." };
+
+  const attachments = parseAttachments(rawAttachments, user.id);
+  if (!parsed.data && attachments.length === 0) return { ok: false, error: "Write a message first." };
 
   const member = await prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId: user.id } },
@@ -30,7 +41,13 @@ export async function sendMessage(conversationId: string, rawBody: string): Prom
   if (!member) return { ok: false, error: "You are not in this chat." };
 
   const message = await prisma.message.create({
-    data: { conversationId, senderId: user.id, body: parsed.data },
+    data: {
+      conversationId,
+      senderId: user.id,
+      body: parsed.data,
+      attachments: { create: attachmentRows(attachments, user.id) },
+    },
+    include: { attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } } },
   });
   // Sending counts as reading everything up to now, so your own message never shows as unread.
   await prisma.conversationMember.update({
@@ -46,6 +63,7 @@ export async function sendMessage(conversationId: string, rawBody: string): Prom
       senderName: user.name,
       body: message.body,
       createdAt: message.createdAt.toISOString(),
+      attachments: message.attachments,
     },
   };
 }

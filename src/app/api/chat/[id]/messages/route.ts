@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { attachmentSelect } from "@/lib/uploads.server";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       where: { conversationId: id, createdAt: { gte: after } },
       orderBy: { createdAt: "asc" },
       take: 100,
-      include: { sender: { select: { name: true } } },
+      include: {
+        sender: { select: { name: true } },
+        attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
+      },
     }),
     prisma.conversationMember.findMany({
       where: { conversationId: id, userId: { not: userId } },
@@ -56,6 +60,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       senderName: m.sender.name,
       body: m.body,
       createdAt: m.createdAt.toISOString(),
+      attachments: m.attachments,
     })),
     othersReadAt,
   });

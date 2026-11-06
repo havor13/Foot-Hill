@@ -1,151 +1,359 @@
 "use server";
 
-import crypto from "node:crypto";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AuthError } from "next-auth";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { auth, signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
-import { sendVerificationCode } from "@/lib/mail";
+import { requireUser } from "@/lib/session";
+import { getOrCreateDm } from "@/lib/chat";
+import { provoLocalToDate } from "@/lib/format";
+import { INDUSTRIES, OPEN_TO } from "@/lib/constants";
+import { attachmentRows, parseAttachments, removeBlobs } from "@/lib/uploads.server";
 
-export type FormState = { error?: string; message?: string };
+const refresh = () => revalidatePath("/", "layout");
+const text = (v: FormDataEntryValue | null) => String(v ?? "").trim();
 
-const BYU_EMAIL = /^[^\s@]+@(student\.)?byu\.edu$/i;
-
-function hashCode(code: string): string {
-  return crypto
-    .createHash("sha256")
-    .update(code + (process.env.AUTH_SECRET ?? ""))
-    .digest("hex");
+async function isMember(userId: string, groupId: string) {
+  const m = await prisma.membership.findUnique({ where: { userId_groupId: { userId, groupId } } });
+  return Boolean(m);
 }
 
-async function issueCode(userId: string, email: string): Promise<void> {
-  await prisma.verificationCode.deleteMany({ where: { userId } });
-  const code = String(crypto.randomInt(100000, 1000000));
-  await prisma.verificationCode.create({
-    data: { userId, codeHash: hashCode(code), expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+/* ---------- posts ---------- */
+
+export async function createPost(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const parsed = z
+    .object({ groupId: z.string().min(1), body: z.string().trim().max(2000) })
+    .safeParse({ groupId: formData.get("groupId"), body: formData.get("body") ?? "" });
+  if (!parsed.success) return;
+  const attachments = parseAttachments(formData.getAll("attachment"), user.id);
+  if (!parsed.data.body && attachments.length === 0) return; // nothing to post
+  if (!(await isMember(user.id, parsed.data.groupId))) return;
+  await prisma.post.create({
+    data: {
+      body: parsed.data.body,
+      authorId: user.id,
+      groupId: parsed.data.groupId,
+      attachments: { create: attachmentRows(attachments, user.id) },
+    },
   });
-  await sendVerificationCode(email, code);
+  refresh();
 }
 
-const signupSchema = z.object({
-  name: z.string().trim().min(2, "Enter your full name.").max(80),
-  email: z.string().trim().toLowerCase().email("Enter a valid email address."),
-  password: z.string().min(8, "Use at least 8 characters.").max(100),
-  role: z.enum(["STUDENT", "ALUMNI"]),
+export async function deletePost(postId: string): Promise<void> {
+  const user = await requireUser();
+  const post = await prisma.post.findFirst({
+    where: { id: postId, authorId: user.id },
+    select: { attachments: { select: { url: true } } },
+  });
+  if (!post) return;
+  await prisma.post.delete({ where: { id: postId } });
+  await removeBlobs(post.attachments.map((a) => a.url)); // free the storage too
+  refresh();
+}
+
+export async function toggleLike(postId: string): Promise<void> {
+  const user = await requireUser();
+  const post = await prisma.post.findFirst({
+    where: { id: postId, group: { memberships: { some: { userId: user.id } } } },
+    select: { id: true },
+  });
+  if (!post) return;
+  const key = { userId_postId: { userId: user.id, postId } };
+  const existing = await prisma.like.findUnique({ where: key });
+  if (existing) await prisma.like.delete({ where: key });
+  else await prisma.like.create({ data: { userId: user.id, postId } });
+  refresh();
+}
+
+export async function addComment(postId: string, formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const body = text(formData.get("body"));
+  if (!body || body.length > 1000) return;
+  const post = await prisma.post.findFirst({
+    where: { id: postId, group: { memberships: { some: { userId: user.id } } } },
+    select: { id: true },
+  });
+  if (!post) return;
+  await prisma.comment.create({ data: { body, postId, authorId: user.id } });
+  refresh();
+}
+
+/* ---------- groups and course circles ---------- */
+
+export async function joinGroup(groupId: string): Promise<void> {
+  const user = await requireUser();
+  const group = await prisma.group.findUnique({ where: { id: groupId }, include: { conversation: true } });
+  if (!group) return;
+  await prisma.membership.upsert({
+    where: { userId_groupId: { userId: user.id, groupId } },
+    update: {},
+    create: { userId: user.id, groupId },
+  });
+  if (group.conversation) {
+    await prisma.conversationMember.upsert({
+      where: { conversationId_userId: { conversationId: group.conversation.id, userId: user.id } },
+      update: {},
+      create: { conversationId: group.conversation.id, userId: user.id },
+    });
+  }
+  refresh();
+}
+
+export async function leaveGroup(groupId: string): Promise<void> {
+  const user = await requireUser();
+  await prisma.membership.deleteMany({ where: { userId: user.id, groupId } });
+  await prisma.conversationMember.deleteMany({
+    where: { userId: user.id, conversation: { groupId } },
+  });
+  refresh();
+}
+
+export async function createGroup(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const parsed = z
+    .object({
+      name: z.string().trim().min(3).max(60),
+      description: z.string().trim().min(5).max(300),
+    })
+    .safeParse({ name: formData.get("name"), description: formData.get("description") });
+  if (!parsed.success) return;
+
+  const { name, description } = parsed.data;
+  const slug =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) +
+    "-" +
+    Math.random().toString(36).slice(2, 7);
+
+  const group = await prisma.group.create({
+    data: {
+      name,
+      description,
+      slug,
+      kind: "GROUP",
+      memberships: { create: { userId: user.id, isAdmin: true } },
+      conversation: { create: { isGroup: true, name, members: { create: { userId: user.id } } } },
+    },
+  });
+  refresh();
+  redirect(`/groups/${group.id}`);
+}
+
+export async function createCourse(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const parsed = z
+    .object({
+      code: z.string().trim().min(2).max(14),
+      title: z.string().trim().min(3).max(80),
+      term: z.string().trim().max(30).optional(),
+    })
+    .safeParse({
+      code: formData.get("code"),
+      title: formData.get("title"),
+      term: text(formData.get("term")) || undefined,
+    });
+  if (!parsed.success) return;
+
+  const code = parsed.data.code.toUpperCase().replace(/\s+/g, " ");
+
+  // Reuse the circle if someone already made one for this course.
+  const existing = await prisma.group.findFirst({
+    where: { kind: "COURSE", courseCode: { equals: code, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) {
+    await joinGroup(existing.id);
+    redirect(`/groups/${existing.id}`);
+  }
+
+  const slug =
+    code.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Math.random().toString(36).slice(2, 7);
+  const group = await prisma.group.create({
+    data: {
+      name: parsed.data.title,
+      description: `Questions, notes and study sessions for ${code}.`,
+      slug,
+      kind: "COURSE",
+      courseCode: code,
+      term: parsed.data.term ?? null,
+      memberships: { create: { userId: user.id, isAdmin: true } },
+      conversation: { create: { isGroup: true, name: `${code} ${parsed.data.title}`, members: { create: { userId: user.id } } } },
+    },
+  });
+  refresh();
+  redirect(`/groups/${group.id}`);
+}
+
+/* ---------- events ---------- */
+
+export async function toggleRsvp(eventId: string): Promise<void> {
+  const user = await requireUser();
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+  if (!event) return;
+  const key = { userId_eventId: { userId: user.id, eventId } };
+  const existing = await prisma.rsvp.findUnique({ where: key });
+  if (existing) await prisma.rsvp.delete({ where: key });
+  else await prisma.rsvp.create({ data: { userId: user.id, eventId } });
+  refresh();
+}
+
+export async function createEvent(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const parsed = z
+    .object({
+      groupId: z.string().min(1),
+      title: z.string().trim().min(2).max(100),
+      location: z.string().trim().min(2).max(120),
+      description: z.string().trim().max(500).optional(),
+    })
+    .safeParse({
+      groupId: formData.get("groupId"),
+      title: formData.get("title"),
+      location: formData.get("location"),
+      description: text(formData.get("description")) || undefined,
+    });
+  const startsAt = provoLocalToDate(text(formData.get("startsAt")));
+  if (!parsed.success || !startsAt) return;
+  if (!(await isMember(user.id, parsed.data.groupId))) return;
+
+  const event = await prisma.event.create({
+    data: { ...parsed.data, startsAt, createdById: user.id },
+  });
+  await prisma.rsvp.create({ data: { userId: user.id, eventId: event.id } });
+  refresh();
+}
+
+/* ---------- alumni ---------- */
+
+export async function requestIntro(toId: string, formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const note = text(formData.get("note"));
+  if (user.role !== "STUDENT" || note.length < 10 || note.length > 600 || toId === user.id) return;
+  const target = await prisma.alumniProfile.findFirst({ where: { userId: toId, approved: true } });
+  if (!target) return;
+  await prisma.introRequest.upsert({
+    where: { fromId_toId: { fromId: user.id, toId } },
+    update: {},
+    create: { fromId: user.id, toId, note },
+  });
+  refresh();
+}
+
+export async function respondIntro(requestId: string, accept: boolean): Promise<void> {
+  const user = await requireUser();
+  const req = await prisma.introRequest.findFirst({
+    where: { id: requestId, toId: user.id, status: "PENDING" },
+  });
+  if (!req) return;
+  await prisma.introRequest.update({
+    where: { id: requestId },
+    data: { status: accept ? "ACCEPTED" : "DECLINED" },
+  });
+  if (accept) {
+    const convo = await getOrCreateDm(req.fromId, req.toId);
+    await prisma.message.create({
+      data: { conversationId: convo.id, senderId: req.fromId, body: req.note },
+    });
+  }
+  refresh();
+}
+
+export async function approveAlumni(userId: string, approve: boolean): Promise<void> {
+  const admin = await requireUser();
+  if (!admin.isAdmin) return;
+  if (approve) await prisma.alumniProfile.updateMany({ where: { userId }, data: { approved: true } });
+  else await prisma.alumniProfile.deleteMany({ where: { userId } });
+  refresh();
+}
+
+/* ---------- chat and profile ---------- */
+
+export async function startDm(otherId: string): Promise<void> {
+  const user = await requireUser();
+  if (otherId === user.id) return;
+  const other = await prisma.user.findFirst({
+    where: {
+      id: otherId,
+      emailVerified: { not: null },
+      OR: [{ role: "STUDENT" }, { alumni: { approved: true } }],
+    },
+    select: { id: true, role: true },
+  });
+  if (!other) return;
+
+  // A student and an alumnus can only chat after the alumnus accepted an introduction.
+  if (user.role !== other.role) {
+    const [studentId, alumnusId] = user.role === "STUDENT" ? [user.id, other.id] : [other.id, user.id];
+    const accepted = await prisma.introRequest.findFirst({
+      where: { fromId: studentId, toId: alumnusId, status: "ACCEPTED" },
+      select: { id: true },
+    });
+    if (!accepted) return;
+  }
+  if (user.role === "ALUMNI" && other.role === "ALUMNI") return;
+
+  const convo = await getOrCreateDm(user.id, other.id);
+  redirect(`/chat/${convo.id}`);
+}
+
+const profileSchema = z.object({
+  name: z.string().trim().min(2).max(80),
   major: z.string().trim().max(80).optional(),
-  gradYear: z.coerce.number().int().min(1950).max(2100).optional(),
+  hometown: z.string().trim().max(80).optional(),
+  mission: z.string().trim().max(80).optional(),
+  bio: z.string().trim().max(500).optional(),
 });
 
-export async function signup(_prev: FormState, formData: FormData): Promise<FormState> {
-  const parsed = signupSchema.safeParse({
+const alumniSchema = z.object({
+  jobTitle: z.string().trim().min(2).max(100),
+  location: z.string().trim().min(2).max(100),
+  industry: z.enum(INDUSTRIES),
+  openTo: z.array(z.enum(OPEN_TO)).min(1),
+  bio: z.string().trim().min(10).max(400),
+});
+
+export async function updateProfile(formData: FormData): Promise<void> {
+  const user = await requireUser({ allowPendingAlumni: true });
+  const base = profileSchema.safeParse({
     name: formData.get("name"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-    role: formData.get("role"),
-    major: formData.get("major") || undefined,
-    gradYear: formData.get("gradYear") || undefined,
+    major: text(formData.get("major")) || undefined,
+    hometown: text(formData.get("hometown")) || undefined,
+    mission: text(formData.get("mission")) || undefined,
+    bio: text(formData.get("bio")) || undefined,
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
-  const { name, email, password, role, major, gradYear } = parsed.data;
+  if (!base.success) return;
 
-  if (role === "STUDENT" && !BYU_EMAIL.test(email)) {
-    return { error: "Students sign up with a BYU email that ends in @byu.edu." };
-  }
-  if (role === "ALUMNI" && !gradYear) {
-    return { error: "Enter the year you graduated." };
-  }
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return { error: "An account with that email already exists. Try signing in." };
-
-  const user = await prisma.user.create({
-    data: { name, email, role, major, gradYear, passwordHash: await bcrypt.hash(password, 12) },
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      name: base.data.name,
+      major: base.data.major ?? null,
+      hometown: base.data.hometown ?? null,
+      mission: base.data.mission ?? null,
+      bio: base.data.bio ?? null,
+    },
   });
 
-  try {
-    await issueCode(user.id, email);
-  } catch {
-    await prisma.user.delete({ where: { id: user.id } });
-    return { error: "We could not send the verification email. Please try again in a minute." };
+  if (user.role === "ALUMNI") {
+    const alumni = alumniSchema.safeParse({
+      jobTitle: formData.get("jobTitle"),
+      location: formData.get("location"),
+      industry: formData.get("industry"),
+      openTo: formData.getAll("openTo"),
+      bio: formData.get("alumniBio"),
+    });
+    if (alumni.success) {
+      await prisma.alumniProfile.upsert({
+        where: { userId: user.id },
+        update: alumni.data,
+        create: { ...alumni.data, userId: user.id },
+      });
+    }
   }
-
-  try {
-    await signIn("credentials", { email, password, redirectTo: "/verify" });
-  } catch (e) {
-    if (e instanceof AuthError) return { error: "Your account was created. Sign in to continue." };
-    throw e; // signIn redirects by throwing; let Next.js handle it
-  }
-  return {};
-}
-
-export async function login(_prev: FormState, formData: FormData): Promise<FormState> {
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  if (!email || !password) return { error: "Enter your email and password." };
-  try {
-    await signIn("credentials", { email, password, redirectTo: "/feed" });
-  } catch (e) {
-    if (e instanceof AuthError) return { error: "That email and password do not match." };
-    throw e;
-  }
-  return {};
-}
-
-export async function verifyCode(_prev: FormState, formData: FormData): Promise<FormState> {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const userId = session.user.id;
-
-  const code = String(formData.get("code") ?? "").replace(/\s/g, "");
-  if (!/^\d{6}$/.test(code)) return { error: "Enter the 6-digit code from your email." };
-
-  const record = await prisma.verificationCode.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!record || record.expiresAt < new Date()) {
-    return { error: "That code has expired. Ask for a new one below." };
-  }
-  if (record.attempts >= 5) return { error: "Too many wrong tries. Ask for a new code below." };
-
-  const given = Buffer.from(hashCode(code));
-  const real = Buffer.from(record.codeHash);
-  const ok = given.length === real.length && crypto.timingSafeEqual(given, real);
-  if (!ok) {
-    await prisma.verificationCode.update({ where: { id: record.id }, data: { attempts: { increment: 1 } } });
-    return { error: "That code is not right. Check it and try again." };
-  }
-
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { emailVerified: new Date() } }),
-    prisma.verificationCode.deleteMany({ where: { userId } }),
-  ]);
-  redirect("/groups");
-}
-
-export async function resendCode(): Promise<FormState> {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!user) redirect("/login");
-
-  const latest = await prisma.verificationCode.findFirst({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-  });
-  if (latest && Date.now() - latest.createdAt.getTime() < 60_000) {
-    return { error: "Wait a minute before asking for another code." };
-  }
-  try {
-    await issueCode(user.id, user.email);
-  } catch {
-    return { error: "We could not send the email. Please try again shortly." };
-  }
-  return { message: "A new code is on its way." };
-}
-
-export async function logout(): Promise<void> {
-  await signOut({ redirectTo: "/" });
+  refresh();
+  redirect("/settings?saved=1");
 }

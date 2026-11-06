@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { hue, initials } from "@/lib/format";
+import { attachmentSelect } from "@/lib/uploads.server";
 import ChatList from "@/components/ChatList";
 import ChatThread from "@/components/ChatThread";
 
@@ -23,7 +24,10 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     where: { conversationId: id },
     orderBy: { createdAt: "desc" },
     take: 100,
-    include: { sender: { select: { name: true } } },
+    include: {
+      sender: { select: { name: true } },
+      attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
+    },
   });
   newest.reverse();
 
@@ -81,6 +85,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
             senderName: m.sender.name,
             body: m.body,
             createdAt: m.createdAt.toISOString(),
+            attachments: m.attachments,
           }))}
           initialOthersReadAt={othersReadAt}
         />

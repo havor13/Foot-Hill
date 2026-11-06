@@ -87,6 +87,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
           <Composer
             fixedGroupId={group.id}
             userName={user.name}
+            userId={user.id}
             placeholder={isCourse ? `Ask your circle a question about ${group.courseCode}` : "Share something with the group"}
           />
         </>

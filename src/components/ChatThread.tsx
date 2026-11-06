@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage, type ChatMsg } from "@/app/(app)/chat/actions";
+import { isImageType, UPLOAD_NOTE, type AttachmentInput } from "@/lib/uploads";
+import { useAttachmentUploader } from "@/components/useAttachmentUploader";
+import { AttachButton, AttachChips } from "@/components/AttachControls";
+import AttachmentList from "@/components/AttachmentList";
 
 const TZ = "America/Denver";
 const POLL_MS = 3000;
@@ -58,6 +62,7 @@ export default function ChatThread({
   const [othersReadAt, setOthersReadAt] = useState<string | null>(initialOthersReadAt);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const uploader = useAttachmentUploader(meId);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true); // keep the view pinned to the newest message unless the reader scrolled up
   const cursor = useRef<string>(initial.at(-1)?.createdAt ?? new Date(0).toISOString());
@@ -103,8 +108,8 @@ export default function ChatThread({
     };
   }, [poll]);
 
-  async function deliver(tempId: string, body: string) {
-    const result = await sendMessage(conversationId, body).catch(() => null);
+  async function deliver(tempId: string, body: string, files: AttachmentInput[]) {
+    const result = await sendMessage(conversationId, body, files).catch(() => null);
     if (!result || !result.ok) {
       setError(result && !result.ok ? result.error : "Could not send. Check your connection and try again.");
       setRows((prev) => prev.map((r) => (r.id === tempId ? { ...r, state: "failed" as const } : r)));
@@ -115,24 +120,36 @@ export default function ChatThread({
     setRows((prev) => mergeRows(prev.filter((r) => r.id !== tempId), [sent]));
   }
 
+  const canSend = (text.trim().length > 0 || uploader.ready.length > 0) && !uploader.uploading;
+
   function submit() {
+    if (!canSend) return;
     const body = text.trim();
-    if (!body) return;
+    const files = uploader.ready;
     setError("");
     setText("");
+    uploader.clear();
     stick.current = true;
     const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     setRows((prev) => [
       ...prev,
-      { id: tempId, senderId: meId, senderName: "You", body, createdAt: new Date().toISOString(), state: "sending" },
+      {
+        id: tempId,
+        senderId: meId,
+        senderName: "You",
+        body,
+        createdAt: new Date().toISOString(),
+        attachments: files.map((f, i) => ({ ...f, id: `${tempId}-${i}`, kind: isImageType(f.contentType) ? "IMAGE" : "FILE" })),
+        state: "sending",
+      },
     ]);
-    void deliver(tempId, body);
+    void deliver(tempId, body, files);
   }
 
   function retry(row: Row) {
     setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, state: "sending" as const } : r)));
     setError("");
-    void deliver(row.id, row.body);
+    void deliver(row.id, row.body, row.attachments);
   }
 
   let lastDay = "";
@@ -168,13 +185,14 @@ export default function ChatThread({
               )}
               <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3 py-1.5 sm:max-w-[70%] ${
+                  className={`grid max-w-[85%] gap-1.5 rounded-2xl px-3 py-1.5 sm:max-w-[70%] ${
                     mine ? "rounded-br-sm bg-bubble-me" : "rounded-bl-sm border border-line bg-surface"
                   } ${m.state === "sending" ? "opacity-70" : ""}`}
                 >
                   {isGroup && !mine && <b className="block text-xs text-accent">{m.senderName}</b>}
-                  <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                  <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-muted">
+                  {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                  <AttachmentList items={m.attachments} compact />
+                  <div className="flex items-center justify-end gap-1.5 text-[11px] text-muted">
                     {m.state === "failed" ? (
                       <>
                         <span className="text-danger">Not sent</span>
@@ -203,14 +221,16 @@ export default function ChatThread({
           e.preventDefault();
           submit();
         }}
-        className="border-t border-line bg-surface p-3"
+        className="grid gap-2 border-t border-line bg-surface p-3"
       >
         {error && (
-          <p role="alert" className="pb-2 text-sm text-danger">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
+        <AttachChips uploader={uploader} />
         <div className="flex items-end gap-2">
+          <AttachButton uploader={uploader} />
           <label htmlFor="chat-text" className="sr-only">
             Message
           </label>
@@ -229,12 +249,13 @@ export default function ChatThread({
             }}
             className="input max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-2xl"
           />
-          <button type="submit" disabled={!text.trim()} aria-label="Send" className="btn btn-primary h-10 w-10 shrink-0 !p-0">
+          <button type="submit" disabled={!canSend} aria-label="Send" className="btn btn-primary h-10 w-10 shrink-0 !p-0">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
               <path d="M3 20.5l18-8.5L3 3.5l.2 6.6L14 12 3.2 13.9z" />
             </svg>
           </button>
         </div>
+        <p className="text-xs text-muted">{uploader.uploading ? "Uploading. You can send once it finishes." : UPLOAD_NOTE}</p>
       </form>
     </div>
   );

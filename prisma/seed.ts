@@ -10,8 +10,6 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const TERM = "Fall 2026";
-
 const GROUPS = [
   { slug: "y-mountain-hikers", name: "Y Mountain Hikers", description: "Sunrise hikes, trail tips and carpools up Rock Canyon and beyond." },
   { slug: "stats-study-hall", name: "Stats Study Hall", description: "Weekly problem sessions and midterm review for statistics courses." },
@@ -23,15 +21,27 @@ const GROUPS = [
   { slug: "new-student-welcome", name: "New Student Welcome", description: "First-semester questions, answered by students who just did it." },
 ];
 
+// Administrative Assistant (BUS), Software Development (CSE, ITM) and Web Development (WDD). Add more here.
 const COURSES = [
-  { code: "CS 142", title: "Introduction to Computer Programming" },
-  { code: "STAT 221", title: "Principles of Statistics" },
-  { code: "MATH 112", title: "Calculus 1" },
-  { code: "CHEM 105", title: "Principles of Chemistry" },
-  { code: "ECON 110", title: "Principles of Economics" },
-  { code: "PSYCH 111", title: "General Psychology" },
-  { code: "WRTG 150", title: "Writing and Rhetoric" },
+  { code: "BUS 105", title: "Spreadsheet Essentials", note: "Also listed as BUSPC105." },
+  { code: "BUS 129", title: "Office Procedures", note: "" },
+  { code: "BUS 180", title: "The Cycle of Cash", note: "" },
+  { code: "BUS 240", title: "Word Processing I", note: "" },
+  { code: "CSE 212", title: "Programming with Data Structures", note: "" },
+  { code: "CSE 270", title: "Software Testing", note: "" },
+  { code: "CSE 300", title: "Professional Readiness", note: "" },
+  { code: "CSE 310", title: "Applied Programming", note: "" },
+  { code: "CSE 325", title: ".NET Software Development", note: "" },
+  { code: "CSE 370", title: "Software Engineering Principles", note: "" },
+  { code: "ITM 111", title: "Introduction to Databases", note: "" },
+  { code: "CSE 340", title: "Web Backend Development", note: "" },
+  { code: "CSE 341", title: "Web Services", note: "" },
+  { code: "WDD 330", title: "Web Frontend Development II", note: "" },
+  { code: "WDD 430", title: "Web Full-Stack Development", note: "" },
 ];
+
+// Example circles from the first version. Removed on seed only if nobody has posted in them.
+const RETIRED_COURSE_SLUGS = ["bus-129", "bus-105", "math-112", "chem-105", "econ-110", "psych-111", "wrtg-150"];
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -45,7 +55,7 @@ async function upsertGroup(data: {
   const group = await prisma.group.upsert({
     where: { slug: data.slug },
     update: { name: data.name, description: data.description },
-    create: { ...data, term: data.kind === "COURSE" ? TERM : null },
+    create: data,
   });
   // Every group and course circle has a chat room that members are added to when they join.
   await prisma.conversation.upsert({
@@ -82,12 +92,16 @@ async function seedStarter() {
     const row = await upsertGroup({
       slug: slugify(c.code),
       name: c.title,
-      description: `Questions, notes and study sessions for ${c.code}, ${TERM}.`,
+      description: `Questions, notes and study sessions for ${c.code}. ${c.note}`.trim(),
       kind: "COURSE",
       courseCode: c.code,
     });
     groups.set(slugify(c.code), row.id);
   }
+  const removed = await prisma.group.deleteMany({
+    where: { slug: { in: RETIRED_COURSE_SLUGS }, kind: "COURSE", posts: { none: {} } },
+  });
+  if (removed.count) console.log(`Removed ${removed.count} example course circles from the first version.`);
   console.log(`Seeded ${GROUPS.length} groups and ${COURSES.length} course circles.`);
   return groups;
 }
@@ -147,8 +161,8 @@ async function seedDemo(groups: Map<string, string>) {
   const memberships: Record<string, string[]> = {
     "y-mountain-hikers": ["Caleb Brooks", "Eli Warner", "Maya Torres"],
     "stats-study-hall": ["Maya Torres", "Priya Nair"],
-    "stat-221": ["Maya Torres", "Priya Nair", "Hannah Reed"],
-    "cs-142": ["Daniel Kim", "Eli Warner"],
+    "bus-105": ["Maya Torres", "Priya Nair", "Hannah Reed"],
+    "bus-129": ["Daniel Kim", "Eli Warner"],
     "returned-missionaries": ["Daniel Kim", "Lucia Moreno", "Jordan Hale", "Eli Warner"],
     "music-and-open-mic": ["Lucia Moreno", "Jordan Hale"],
     "housing-and-roommates": ["Hannah Reed"],
@@ -166,8 +180,8 @@ async function seedDemo(groups: Map<string, string>) {
   }
 
   const posts: [string, string, string][] = [
-    ["Maya Torres", "stat-221", "Review session is Tuesday at 7 PM in the library, 3rd floor. Bringing practice problems for confidence intervals."],
-    ["Priya Nair", "stat-221", "How do I know when to use a t-test instead of a z-test on the homework?"],
+    ["Maya Torres", "bus-105", "Study session for the BUS 105 spreadsheet project on Tuesday at 7 PM. I will share my formulas sheet. Bring questions about VLOOKUP."],
+    ["Priya Nair", "bus-105", "What is the difference between VLOOKUP and XLOOKUP, and which one does the assignment want?"],
     ["Caleb Brooks", "y-mountain-hikers", "Sunrise hike to the Y this Saturday. Meet at the trailhead at 6:15 AM. Bring a headlamp and water."],
     ["Daniel Kim", "returned-missionaries", "Anyone else who served in the Korea Busan mission? Trying to organize a reunion dinner this month."],
     ["Lucia Moreno", "music-and-open-mic", "Looking for a bassist and a drummer for Thursday open mic. All levels welcome."],
@@ -179,7 +193,7 @@ async function seedDemo(groups: Map<string, string>) {
   const hour = 3_600_000;
   const day = 24 * hour;
   const events: [string, string, string, string, number][] = [
-    ["Maya Torres", "stat-221", "Stats 221 midterm review", "Library, 3rd floor study rooms", 3 * day + 4 * hour],
+    ["Maya Torres", "bus-105", "BUS 105 spreadsheet study session", "Online, link in the circle chat", 3 * day + 4 * hour],
     ["Caleb Brooks", "y-mountain-hikers", "Sunrise hike to the Y", "Rock Canyon trailhead", 6 * day],
     ["Lucia Moreno", "music-and-open-mic", "Open mic night", "Wilkinson Center lounge", 5 * day],
   ];

@@ -1,5 +1,6 @@
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/SubmitButton";
+import PostAttachments from "@/components/PostAttachments";
 import { createPost } from "@/app/(app)/actions";
 
 export default function Composer({
@@ -8,12 +9,14 @@ export default function Composer({
   fixedGroupId,
   placeholder = "Ask a question, share a plan or say hello",
   userName,
+  userId,
 }: {
   groups?: { id: string; name: string }[];
   defaultGroupId?: string;
   fixedGroupId?: string;
   placeholder?: string;
   userName?: string;
+  userId?: string;
 }) {
   return (
     <form action={createPost} className="card grid gap-3">
@@ -25,13 +28,13 @@ export default function Composer({
         <textarea
           id="post-body"
           name="body"
-          required
           maxLength={2000}
           rows={3}
           placeholder={placeholder}
           className="input min-w-0 flex-1 resize-y"
         />
       </div>
+      {userId && <PostAttachments userId={userId} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {fixedGroupId ? (
           <input type="hidden" name="groupId" value={fixedGroupId} />

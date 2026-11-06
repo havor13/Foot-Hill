@@ -50,7 +50,7 @@ export default function SignupPage() {
           type="email"
           autoComplete="email"
           required
-          placeholder={role === "STUDENT" ? "name@byu.edu" : "you@example.com"}
+          placeholder={role === "STUDENT" ? "name@byu.edu or name@byupathway.edu" : "you@example.com"}
           className="input"
         />
       </label>

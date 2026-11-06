@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/session";
 import { getOrCreateDm } from "@/lib/chat";
 import { provoLocalToDate } from "@/lib/format";
 import { INDUSTRIES, OPEN_TO } from "@/lib/constants";
+import { attachmentRows, parseAttachments, removeBlobs } from "@/lib/uploads.server";
 
 const refresh = () => revalidatePath("/", "layout");
 const text = (v: FormDataEntryValue | null) => String(v ?? "").trim();
@@ -22,19 +23,32 @@ async function isMember(userId: string, groupId: string) {
 export async function createPost(formData: FormData): Promise<void> {
   const user = await requireUser();
   const parsed = z
-    .object({ groupId: z.string().min(1), body: z.string().trim().min(1).max(2000) })
-    .safeParse({ groupId: formData.get("groupId"), body: formData.get("body") });
+    .object({ groupId: z.string().min(1), body: z.string().trim().max(2000) })
+    .safeParse({ groupId: formData.get("groupId"), body: formData.get("body") ?? "" });
   if (!parsed.success) return;
+  const attachments = parseAttachments(formData.getAll("attachment"), user.id);
+  if (!parsed.data.body && attachments.length === 0) return; // nothing to post
   if (!(await isMember(user.id, parsed.data.groupId))) return;
   await prisma.post.create({
-    data: { body: parsed.data.body, authorId: user.id, groupId: parsed.data.groupId },
+    data: {
+      body: parsed.data.body,
+      authorId: user.id,
+      groupId: parsed.data.groupId,
+      attachments: { create: attachmentRows(attachments, user.id) },
+    },
   });
   refresh();
 }
 
 export async function deletePost(postId: string): Promise<void> {
   const user = await requireUser();
-  await prisma.post.deleteMany({ where: { id: postId, authorId: user.id } });
+  const post = await prisma.post.findFirst({
+    where: { id: postId, authorId: user.id },
+    select: { attachments: { select: { url: true } } },
+  });
+  if (!post) return;
+  await prisma.post.delete({ where: { id: postId } });
+  await removeBlobs(post.attachments.map((a) => a.url)); // free the storage too
   refresh();
 }
 
@@ -123,6 +137,51 @@ export async function createGroup(formData: FormData): Promise<void> {
       kind: "GROUP",
       memberships: { create: { userId: user.id, isAdmin: true } },
       conversation: { create: { isGroup: true, name, members: { create: { userId: user.id } } } },
+    },
+  });
+  refresh();
+  redirect(`/groups/${group.id}`);
+}
+
+export async function createCourse(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const parsed = z
+    .object({
+      code: z.string().trim().min(2).max(14),
+      title: z.string().trim().min(3).max(80),
+      term: z.string().trim().max(30).optional(),
+    })
+    .safeParse({
+      code: formData.get("code"),
+      title: formData.get("title"),
+      term: text(formData.get("term")) || undefined,
+    });
+  if (!parsed.success) return;
+
+  const code = parsed.data.code.toUpperCase().replace(/\s+/g, " ");
+
+  // Reuse the circle if someone already made one for this course.
+  const existing = await prisma.group.findFirst({
+    where: { kind: "COURSE", courseCode: { equals: code, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) {
+    await joinGroup(existing.id);
+    redirect(`/groups/${existing.id}`);
+  }
+
+  const slug =
+    code.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Math.random().toString(36).slice(2, 7);
+  const group = await prisma.group.create({
+    data: {
+      name: parsed.data.title,
+      description: `Questions, notes and study sessions for ${code}.`,
+      slug,
+      kind: "COURSE",
+      courseCode: code,
+      term: parsed.data.term ?? null,
+      memberships: { create: { userId: user.id, isAdmin: true } },
+      conversation: { create: { isGroup: true, name: `${code} ${parsed.data.title}`, members: { create: { userId: user.id } } } },
     },
   });
   refresh();
