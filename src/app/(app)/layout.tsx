@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           href="/settings"
           className="hidden items-center gap-3 rounded-xl border border-line bg-surface p-2.5 hover:bg-surface2 md:flex"
         >
-          <Avatar name={user.name} />
+          <Avatar name={user.name} image={user.image} />
           <span className="min-w-0">
             <b className="block truncate text-sm leading-tight">{user.name}</b>
             <span className="block truncate text-xs text-muted">{user.major ?? (user.role === "ALUMNI" ? "Alumni" : "Student")}</span>

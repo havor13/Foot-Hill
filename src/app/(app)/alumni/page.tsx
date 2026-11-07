@@ -28,7 +28,7 @@ export default async function AlumniPage({ searchParams }: { searchParams: Promi
     },
     orderBy: { user: { name: "asc" } },
     take: 60,
-    include: { user: { select: { id: true, name: true, major: true, gradYear: true } } },
+    include: { user: { select: { id: true, name: true, major: true, gradYear: true, image: true } } },
   });
 
   // Students see the state of requests they sent. Alumni see requests waiting for an answer.
@@ -42,7 +42,7 @@ export default async function AlumniPage({ searchParams }: { searchParams: Promi
     ? await prisma.introRequest.findMany({
         where: { toId: user.id, status: "PENDING" },
         orderBy: { createdAt: "desc" },
-        include: { from: { select: { name: true, major: true } } },
+        include: { from: { select: { name: true, major: true, image: true } } },
       })
     : [];
   const statusByAlumnus = new Map(sent.map((s) => [s.toId, s.status]));
@@ -70,7 +70,7 @@ export default async function AlumniPage({ searchParams }: { searchParams: Promi
           {inbox.map((r) => (
             <div key={r.id} className="card grid gap-3 shadow-sm">
               <div className="flex items-center gap-3">
-                <Avatar name={r.from.name} />
+                <Avatar name={r.from.name} image={r.from.image} />
                 <div className="min-w-0">
                   <b className="block leading-tight">{r.from.name}</b>
                   <span className="text-xs text-muted">
@@ -122,7 +122,7 @@ export default async function AlumniPage({ searchParams }: { searchParams: Promi
             return (
               <div key={p.id} className="card grid content-start gap-3 shadow-sm">
                 <div className="flex items-center gap-3">
-                  <Avatar name={p.user.name} size="lg" />
+                  <Avatar name={p.user.name} image={p.user.image} size="lg" />
                   <div className="min-w-0">
                     <h2 className="truncate text-lg font-bold">{p.user.name}</h2>
                     <span className="block text-sm text-muted">

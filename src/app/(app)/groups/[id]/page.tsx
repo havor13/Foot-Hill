@@ -8,6 +8,7 @@ import Composer from "@/components/Composer";
 import JoinButton from "@/components/JoinButton";
 import EventCard from "@/components/EventCard";
 import EventForm from "@/components/EventForm";
+import DeleteCourse from "@/components/DeleteCourse";
 
 export default async function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,7 +18,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
     where: { id },
     include: {
       _count: { select: { memberships: true } },
-      memberships: { where: { userId: user.id }, select: { userId: true } },
+      memberships: { where: { userId: user.id }, select: { userId: true, isAdmin: true } },
       conversation: { select: { id: true } },
     },
   });
@@ -25,6 +26,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
 
   const joined = group.memberships.length > 0;
   const isCourse = group.kind === "COURSE";
+  const canDelete = isCourse && (user.isAdmin || group.memberships.some((m) => m.isAdmin));
 
   const [posts, events] = await Promise.all([
     prisma.post.findMany({
@@ -71,6 +73,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
             </Link>
           )}
         </div>
+        {canDelete && <DeleteCourse groupId={group.id} label={`${group.courseCode} ${group.name}`} />}
       </header>
 
       {joined ? (
@@ -87,6 +90,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
           <Composer
             fixedGroupId={group.id}
             userName={user.name}
+            userImage={user.image}
             userId={user.id}
             placeholder={isCourse ? `Ask your circle a question about ${group.courseCode}` : "Share something with the group"}
           />

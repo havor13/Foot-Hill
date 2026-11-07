@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { unreadByConversation } from "@/lib/chat";
-import { hue, initials, timeAgo } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
+import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/SubmitButton";
 import { createGroupChat } from "@/app/(app)/chat/actions";
 import { startDm } from "@/app/(app)/actions";
@@ -20,7 +21,7 @@ export default async function ChatList({
       where: { members: { some: { userId } } },
       include: {
         // Only a few other members are needed: the other person in a DM, or a preview for a group.
-        members: { where: { userId: { not: userId } }, take: 3, include: { user: { select: { name: true } } } },
+        members: { where: { userId: { not: userId } }, take: 3, include: { user: { select: { name: true, image: true } } } },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -44,7 +45,8 @@ export default async function ChatList({
     .map((c) => {
       const last = c.messages[0] ?? null;
       const title = c.isGroup ? (c.name ?? "Group chat") : (c.members[0]?.user.name ?? "Unknown student");
-      return { id: c.id, title, isGroup: c.isGroup, last, sortAt: (last?.createdAt ?? c.createdAt).getTime() };
+      const image = c.isGroup ? null : (c.members[0]?.user.image ?? null);
+      return { id: c.id, title, image, isGroup: c.isGroup, last, sortAt: (last?.createdAt ?? c.createdAt).getTime() };
     })
     .sort((a, b) => b.sortAt - a.sortAt);
 
@@ -117,13 +119,7 @@ export default async function ChatList({
                 aria-current={activeId === r.id ? "page" : undefined}
                 className={`flex items-center gap-3 px-4 py-3 hover:bg-bg ${activeId === r.id ? "bg-accent-soft" : ""}`}
               >
-                <span
-                  aria-hidden="true"
-                  className={`grid h-11 w-11 shrink-0 place-items-center font-semibold text-white ${r.isGroup ? "rounded-xl" : "rounded-full"}`}
-                  style={{ background: `hsl(${hue(r.title)} 42% 36%)` }}
-                >
-                  {initials(r.title)}
-                </span>
+                <Avatar name={r.title} image={r.image} square={r.isGroup} />
                 <span className="grid min-w-0 flex-1 gap-0.5">
                   <span className="flex items-baseline justify-between gap-2">
                     <b className={`truncate ${n ? "font-extrabold" : ""}`}>{r.title}</b>

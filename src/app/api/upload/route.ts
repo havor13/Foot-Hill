@@ -1,7 +1,7 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { ALLOWED_TYPES, MAX_UPLOAD_BYTES } from "@/lib/uploads";
+import { ALLOWED_TYPES, AVATAR_TYPES, MAX_AVATAR_BYTES, MAX_UPLOAD_BYTES } from "@/lib/uploads";
 
 /**
  * Hands the browser a short-lived, single-purpose upload token. The browser then uploads the file
@@ -32,6 +32,9 @@ export async function POST(request: Request) {
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
+        if (pathname.startsWith(`avatars/${userId}/`)) {
+          return { allowedContentTypes: AVATAR_TYPES, maximumSizeInBytes: MAX_AVATAR_BYTES, addRandomSuffix: true };
+        }
         if (!pathname.startsWith(`uploads/${userId}/`)) throw new Error("Upload path not allowed.");
         return {
           allowedContentTypes: [...ALLOWED_TYPES],

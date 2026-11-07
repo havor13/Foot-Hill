@@ -75,6 +75,20 @@ export function attachmentRows(list: AttachmentInput[], userId: string) {
   }));
 }
 
+/** True only for a profile photo that this user uploaded to our own Vercel Blob store. */
+export function isOwnAvatarUrl(value: string, userId: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.endsWith(".public.blob.vercel-storage.com") &&
+      decodeURIComponent(url.pathname).startsWith(`/avatars/${userId}/`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Best effort: a failure to delete a file must never block deleting the post. */
 export async function removeBlobs(urls: string[]): Promise<void> {
   if (!urls.length || !process.env.BLOB_READ_WRITE_TOKEN) return;

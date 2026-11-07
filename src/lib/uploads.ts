@@ -5,6 +5,9 @@ export const MAX_ATTACHMENTS = 4; // per post or message
 
 export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
+export const AVATAR_TYPES: string[] = ["image/jpeg", "image/png", "image/webp"];
+export const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // the browser shrinks photos long before this
+
 export const DOC_TYPES = [
   "application/pdf",
   "application/msword",

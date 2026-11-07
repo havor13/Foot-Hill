@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/session";
 import { getOrCreateDm } from "@/lib/chat";
 import { provoLocalToDate } from "@/lib/format";
 import { INDUSTRIES, OPEN_TO } from "@/lib/constants";
-import { attachmentRows, parseAttachments, removeBlobs } from "@/lib/uploads.server";
+import { attachmentRows, isOwnAvatarUrl, parseAttachments, removeBlobs } from "@/lib/uploads.server";
 
 const refresh = () => revalidatePath("/", "layout");
 const text = (v: FormDataEntryValue | null) => String(v ?? "").trim();
@@ -188,6 +188,32 @@ export async function createCourse(formData: FormData): Promise<void> {
   redirect(`/groups/${group.id}`);
 }
 
+/**
+ * Deletes a course circle with its posts, comments, study sessions, group chat and uploaded files.
+ * Only the student who created it (the circle's admin) or a site admin may do this.
+ */
+export async function deleteCourse(groupId: string): Promise<void> {
+  const user = await requireUser();
+  const group = await prisma.group.findFirst({
+    where: { id: groupId, kind: "COURSE" },
+    select: { id: true, memberships: { where: { userId: user.id }, select: { isAdmin: true } } },
+  });
+  if (!group) return;
+  const allowed = user.isAdmin || group.memberships.some((m) => m.isAdmin);
+  if (!allowed) return;
+
+  // Collect the files first: the rows disappear with the circle, the stored files would not.
+  const files = await prisma.attachment.findMany({
+    where: { OR: [{ post: { groupId } }, { message: { conversation: { groupId } } }] },
+    select: { url: true },
+  });
+
+  await prisma.group.delete({ where: { id: groupId } }); // cascades to everything inside it
+  await removeBlobs(files.map((f) => f.url));
+  refresh();
+  redirect("/courses");
+}
+
 /* ---------- events ---------- */
 
 export async function toggleRsvp(eventId: string): Promise<void> {
@@ -356,4 +382,15 @@ export async function updateProfile(formData: FormData): Promise<void> {
   }
   refresh();
   redirect("/settings?saved=1");
+}
+
+/** Saves or clears the profile photo. The picture was already uploaded straight to Vercel Blob. */
+export async function setAvatar(url: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser({ allowPendingAlumni: true });
+  if (url !== null && !isOwnAvatarUrl(url, user.id)) return { ok: false, error: "That picture could not be used." };
+  const previous = user.image;
+  await prisma.user.update({ where: { id: user.id }, data: { image: url } });
+  if (previous && previous !== url && isOwnAvatarUrl(previous, user.id)) await removeBlobs([previous]);
+  refresh();
+  return { ok: true };
 }

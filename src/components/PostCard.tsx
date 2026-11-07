@@ -11,12 +11,12 @@ export type PostView = {
   id: string;
   body: string;
   createdAt: Date;
-  author: { id: string; name: string; major: string | null };
+  author: { id: string; name: string; major: string | null; image: string | null };
   group: { id: string; name: string; kind: "GROUP" | "COURSE" };
   _count: { likes: number; comments: number };
   attachments: AttachmentView[];
   likes: { userId: string }[]; // already filtered to the signed-in user
-  comments: { id: string; body: string; createdAt: Date; author: { name: string } }[];
+  comments: { id: string; body: string; createdAt: Date; author: { name: string; image: string | null } }[];
 };
 
 export default function PostCard({
@@ -39,7 +39,7 @@ export default function PostCard({
   return (
     <article className="card grid gap-3 shadow-sm">
       <header className="flex items-center gap-3">
-        <Avatar name={post.author.name} />
+        <Avatar name={post.author.name} image={post.author.image} />
         <div className="min-w-0">
           <b className="block leading-tight">{post.author.name}</b>
           <span className="text-xs text-muted">
@@ -91,7 +91,7 @@ export default function PostCard({
         <div className="mt-3 grid gap-3">
           {post.comments.map((c) => (
             <div key={c.id} className="flex gap-2.5">
-              <Avatar name={c.author.name} size="sm" />
+              <Avatar name={c.author.name} image={c.author.image} size="sm" />
               <div className="min-w-0 rounded-xl bg-surface2 px-3 py-1.5 text-sm">
                 <b className="block text-xs">{c.author.name}</b>
                 <span className="break-words">{c.body}</span>
@@ -123,7 +123,7 @@ export default function PostCard({
 
 export const postInclude = (userId: string) =>
   ({
-    author: { select: { id: true, name: true, major: true } },
+    author: { select: { id: true, name: true, major: true, image: true } },
     group: { select: { id: true, name: true, kind: true } },
     _count: { select: { likes: true, comments: true } },
     attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
@@ -131,6 +131,6 @@ export const postInclude = (userId: string) =>
     comments: {
       orderBy: { createdAt: "asc" },
       take: 30,
-      select: { id: true, body: true, createdAt: true, author: { select: { name: true } } },
+      select: { id: true, body: true, createdAt: true, author: { select: { name: true, image: true } } },
     },
   }) as const;

@@ -23,7 +23,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
     },
     orderBy: { name: "asc" },
     take: 60,
-    select: { id: true, name: true, major: true, hometown: true, mission: true, bio: true },
+    select: { id: true, name: true, major: true, hometown: true, mission: true, bio: true, image: true },
   });
 
   return (
@@ -44,7 +44,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
           {people.map((p) => (
             <div key={p.id} className="card grid content-start gap-3 shadow-sm">
               <div className="flex items-center gap-3">
-                <Avatar name={p.name} size="lg" />
+                <Avatar name={p.name} image={p.image} size="lg" />
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold">{p.name}</h2>
                   <span className="block text-sm text-muted">{[p.major, p.hometown].filter(Boolean).join(" · ")}</span>

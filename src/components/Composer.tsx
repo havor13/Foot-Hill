@@ -9,6 +9,7 @@ export default function Composer({
   fixedGroupId,
   placeholder = "Ask a question, share a plan or say hello",
   userName,
+  userImage,
   userId,
 }: {
   groups?: { id: string; name: string }[];
@@ -16,12 +17,13 @@ export default function Composer({
   fixedGroupId?: string;
   placeholder?: string;
   userName?: string;
+  userImage?: string | null;
   userId?: string;
 }) {
   return (
     <form action={createPost} className="card grid gap-3">
       <div className="flex gap-3">
-        {userName && <Avatar name={userName} />}
+        {userName && <Avatar name={userName} image={userImage} />}
         <label className="sr-only" htmlFor="post-body">
           Write a post
         </label>

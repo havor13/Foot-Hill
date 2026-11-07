@@ -14,7 +14,7 @@ export default async function AdminAlumniPage() {
   const pending = await prisma.alumniProfile.findMany({
     where: { approved: false, user: { emailVerified: { not: null } } },
     orderBy: { user: { createdAt: "asc" } },
-    include: { user: { select: { id: true, name: true, email: true, major: true, gradYear: true } } },
+    include: { user: { select: { id: true, name: true, email: true, major: true, gradYear: true, image: true } } },
   });
 
   return (
@@ -30,7 +30,7 @@ export default async function AdminAlumniPage() {
         pending.map((p) => (
           <div key={p.id} className="card grid gap-3 shadow-sm">
             <div className="flex items-center gap-3">
-              <Avatar name={p.user.name} />
+              <Avatar name={p.user.name} image={p.user.image} />
               <div className="min-w-0">
                 <b className="block leading-tight">{p.user.name}</b>
                 <span className="block truncate text-xs text-muted">
