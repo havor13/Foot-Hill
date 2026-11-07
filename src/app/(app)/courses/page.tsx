@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { eventParts } from "@/lib/format";
 import JoinButton from "@/components/JoinButton";
+import SubmitButton from "@/components/SubmitButton";
+import { createCourse } from "../actions";
 
 export const metadata = { title: "Course circles" };
 
@@ -39,6 +41,30 @@ export default async function CoursesPage({ searchParams }: { searchParams: Prom
         <h1 className="page-title">Course circles</h1>
         <p className="text-muted">Every class gets its own circle. Ask questions, find study partners and skip the lonely cramming.</p>
       </div>
+
+      <details className="card">
+        <summary className="cursor-pointer font-semibold text-accent">Add your course</summary>
+        <p className="mt-2 text-sm text-muted">
+          Not on the list? Add it. If a circle for that course code already exists, you will join it instead of making a copy.
+        </p>
+        <form action={createCourse} className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="label" htmlFor="cc-code">
+            Course code
+            <input id="cc-code" name="code" required minLength={2} maxLength={14} className="input" placeholder="For example, GS 110" />
+          </label>
+          <label className="label" htmlFor="cc-term">
+            Term (optional)
+            <input id="cc-term" name="term" maxLength={30} className="input" placeholder="For example, Fall 2026" />
+          </label>
+          <label className="label sm:col-span-2" htmlFor="cc-title">
+            Course title
+            <input id="cc-title" name="title" required minLength={3} maxLength={80} className="input" />
+          </label>
+          <div className="sm:col-span-2">
+            <SubmitButton pendingText="Adding…">Add course and join</SubmitButton>
+          </div>
+        </form>
+      </details>
 
       <form className="grid gap-3" role="search">
         <label className="sr-only" htmlFor="q">
