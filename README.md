@@ -44,7 +44,9 @@ npm run dev                 # http://localhost:3000
 ```
 
 - `AUTH_SECRET`: generate with `openssl rand -base64 32`.
-- Without `RESEND_API_KEY`, verification codes are printed in the terminal running `npm run dev`.
+- Verification emails go through Resend (`RESEND_API_KEY`, needs a verified domain) or, if that is empty, through
+  Gmail (`GMAIL_USER` and `GMAIL_APP_PASSWORD`, run `npm install nodemailer @types/nodemailer -D` once).
+  With neither set, codes are printed in the terminal running `npm run dev`.
 - For demo people, posts and events (development only): `SEED_DEMO=1 npm run db:seed`.
   Sign in as `maya.torres@demo.foothill.test` with password `demo-password-1`.
 - Make yourself an admin after signing up: `npm run make-admin -- you@byu.edu`.

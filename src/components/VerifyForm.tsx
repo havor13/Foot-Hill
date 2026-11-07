@@ -13,7 +13,7 @@ export default function VerifyForm({ email }: { email: string }) {
       <div>
         <h1 className="text-2xl font-bold">Check your email</h1>
         <p className="mt-1 text-sm text-muted">
-          We sent a 6-digit code to <b className="text-ink">{email}</b>. It expires in 15 minutes.
+          We sent a 6-digit code to <b className="text-ink">{email}</b>. It expires in 15 minutes. School inboxes sometimes file it under <b className="text-ink">Junk or Spam</b>, so check there too.
         </p>
       </div>
 
