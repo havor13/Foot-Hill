@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { hue, initials } from "@/lib/format";
+import Avatar from "@/components/Avatar";
 import { attachmentSelect } from "@/lib/uploads.server";
+import { summarizeReactions } from "@/lib/reactions";
 import ChatList from "@/components/ChatList";
 import ChatThread from "@/components/ChatThread";
+import CallButtons from "@/components/CallButtons";
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,7 +16,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   const convo = await prisma.conversation.findFirst({
     where: { id, members: { some: { userId: user.id } } },
     include: {
-      members: { include: { user: { select: { id: true, name: true, major: true } } } },
+      members: { include: { user: { select: { id: true, name: true, major: true, image: true } } } },
       group: { select: { id: true, name: true, kind: true } },
     },
   });
@@ -27,6 +29,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     include: {
       sender: { select: { name: true } },
       attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
+      reactions: { select: { emoji: true, userId: true } },
     },
   });
   newest.reverse();
@@ -56,17 +59,12 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
               <path d="M15 5l-7 7 7 7" />
             </svg>
           </Link>
-          <span
-            aria-hidden="true"
-            className={`grid h-10 w-10 shrink-0 place-items-center font-semibold text-white ${convo.isGroup ? "rounded-xl" : "rounded-full"}`}
-            style={{ background: `hsl(${hue(title)} 42% 36%)` }}
-          >
-            {initials(title)}
-          </span>
+          <Avatar name={title} image={convo.isGroup ? null : (others[0]?.user.image ?? null)} square={convo.isGroup} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-display text-lg font-bold leading-tight">{title}</h1>
             <p className="truncate text-xs text-muted">{subtitle}</p>
           </div>
+          <CallButtons conversationId={id} />
           {convo.group && (
             <Link href={`/groups/${convo.group.id}`} className="btn shrink-0">
               {convo.group.kind === "COURSE" ? "Open circle" : "Open group"}
@@ -86,6 +84,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
             body: m.body,
             createdAt: m.createdAt.toISOString(),
             attachments: m.attachments,
+            reactions: summarizeReactions(m.reactions, user.id),
           }))}
           initialOthersReadAt={othersReadAt}
         />

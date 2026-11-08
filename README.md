@@ -18,7 +18,7 @@ Independent student project. Not affiliated with BYU or The Church of Jesus Chri
 | Groups | Browse, join, start your own, plan events, open the group chat. |
 | Course circles | One circle per class: questions and replies, study sessions, group chat. |
 | Alumni | Directory with industry filter and search. Students send an introduction request. If the alumnus accepts, a chat opens with the request as the first message. |
-| Events | Upcoming events with RSVP counts. Times are entered and shown in Provo time. |
+| Events | Upcoming events with RSVP counts. Times are entered and shown in each student's own time zone. |
 | People | Student directory with a Message button (students only). |
 | Chat | Direct messages, group chats, unread badges, read ticks in direct messages. |
 | Uploads | Attach up to 4 photos or documents (10 MB each) to a post or a chat message. Files live in Vercel Blob. |
@@ -53,6 +53,34 @@ npm run dev                 # http://localhost:3000
 - Uploads need `npm install @vercel/blob` and a `BLOB_READ_WRITE_TOKEN` in `.env`. Create a Blob store in the
   Vercel dashboard (Storage tab), connect it to the project, and copy the token. Without the token the
   attach button reports that uploads are not set up.
+
+### Message notifications
+
+Students can turn on pop-up notifications in Settings. They arrive even when the app is closed.
+
+```bash
+npm install web-push
+npm install -D @types/web-push
+npx web-push generate-vapid-keys      # prints a public and a private key
+```
+
+Put the keys in `.env` and in Vercel as `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`
+(for example `mailto:you@example.com`), then run `npm run db:push` and redeploy. On iPhone, notifications work
+only after the site is added to the home screen. No banner is shown for a chat the student is already looking at.
+
+### Audio and video calls
+
+Each chat header has an audio and a video call button. Calls run on [LiveKit Cloud](https://livekit.io) (free plan, no card:
+5,000 participant-minutes a month, 100 people connected at once). The app gives a pass only to members of the chat, and a
+call holds up to 12 people.
+
+```bash
+npm install livekit-server-sdk livekit-client @livekit/components-react @livekit/components-styles
+```
+
+Create a project at cloud.livekit.io, then add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (Settings, Keys)
+to `.env` and Vercel, run `npm run db:push`, and redeploy. When someone starts a call, the others in the chat see a banner
+with a Join button wherever they are in the app, and get a push notification if they turned those on.
 
 ## Deploy to Vercel
 

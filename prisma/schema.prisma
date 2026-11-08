@@ -52,6 +52,10 @@ model User {
   convMembers    ConversationMember[]
   messages       Message[]
   attachments    Attachment[]
+  reactions      Reaction[]
+  pushSubs       PushSubscription[]
+  callsStarted   Call[]               @relation("CallStarter")
+  callParts      CallParticipant[]
 }
 
 model VerificationCode {
@@ -120,6 +124,7 @@ model Post {
   likes     Like[]
   comments  Comment[]
   attachments Attachment[]
+  reactions Reaction[]
 
   @@index([groupId, createdAt])
 }
@@ -194,6 +199,7 @@ model Conversation {
   group     Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
   members   ConversationMember[]
   messages  Message[]
+  calls     Call[]
 }
 
 model ConversationMember {
@@ -216,6 +222,7 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   attachments    Attachment[]
+  reactions      Reaction[]
 
   @@index([conversationId, createdAt])
 }
@@ -243,4 +250,70 @@ model Attachment {
 
   @@index([postId])
   @@index([messageId])
+}
+
+/// An emoji reaction on a post or on a chat message. Exactly one of postId and messageId is set.
+model Reaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  userId    String
+  postId    String?
+  messageId String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, emoji])
+  @@unique([userId, messageId, emoji])
+  @@index([postId])
+  @@index([messageId])
+}
+
+/// One browser or phone that agreed to receive notifications. A student can have several.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum CallKind {
+  AUDIO
+  VIDEO
+}
+
+/// One audio or video call in a chat. The media itself runs on Daily.co; this row says who may join and when.
+model Call {
+  id             String            @id @default(cuid())
+  conversationId String
+  startedById    String
+  kind           CallKind
+  roomName       String            @unique
+  roomUrl        String
+  startedAt      DateTime          @default(now())
+  endedAt        DateTime?
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  startedBy      User              @relation("CallStarter", fields: [startedById], references: [id], onDelete: Cascade)
+  participants   CallParticipant[]
+
+  @@index([conversationId, startedAt])
+}
+
+/// Someone currently in a call. The browser refreshes lastSeenAt every few seconds while the call is open.
+model CallParticipant {
+  callId     String
+  userId     String
+  joinedAt   DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  call       Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([callId, userId])
+  @@index([userId])
 }

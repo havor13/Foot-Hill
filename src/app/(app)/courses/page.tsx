@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { eventParts } from "@/lib/format";
+import { getUserTz } from "@/lib/tz";
 import JoinButton from "@/components/JoinButton";
 import SubmitButton from "@/components/SubmitButton";
 import { createCourse } from "../actions";
@@ -10,6 +11,7 @@ export const metadata = { title: "Course circles" };
 
 export default async function CoursesPage({ searchParams }: { searchParams: Promise<{ q?: string; all?: string }> }) {
   const user = await requireUser();
+  const tz = await getUserTz();
   const { q = "", all } = await searchParams;
   const query = q.trim();
   const showAll = all === "1" || Boolean(query);
@@ -86,7 +88,7 @@ export default async function CoursesPage({ searchParams }: { searchParams: Prom
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {courses.map((c) => {
             const next = c.events[0];
-            const p = next ? eventParts(next.startsAt) : null;
+            const p = next ? eventParts(next.startsAt, tz) : null;
             return (
               <div key={c.id} className="card grid content-start gap-2.5 shadow-sm">
                 <div className="flex items-center justify-between gap-2">

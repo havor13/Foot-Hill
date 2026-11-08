@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import EventCard from "@/components/EventCard";
+import { getUserTz } from "@/lib/tz";
 
 export const metadata = { title: "Events" };
 
 export default async function EventsPage() {
   const user = await requireUser();
+  const tz = await getUserTz();
   const events = await prisma.event.findMany({
     where: { startsAt: { gte: new Date() } },
     orderBy: { startsAt: "asc" },
@@ -24,7 +26,7 @@ export default async function EventsPage() {
         <p className="text-muted">Show up once and you will know three new people. Plan your own from any group page.</p>
       </div>
       {events.length ? (
-        events.map((e) => <EventCard key={e.id} event={e} going={e.rsvps.length > 0} />)
+        events.map((e) => <EventCard key={e.id} event={e} going={e.rsvps.length > 0} tz={tz} />)
       ) : (
         <div className="card text-center text-muted">No upcoming events. Open a group and plan the first one.</div>
       )}

@@ -1,7 +1,9 @@
 import SubmitButton from "@/components/SubmitButton";
 import { createEvent } from "@/app/(app)/actions";
+import { getUserTz } from "@/lib/tz";
 
-export default function EventForm({ groupId, label }: { groupId: string; label: string }) {
+export default async function EventForm({ groupId, label }: { groupId: string; label: string }) {
+  const tz = await getUserTz();
   return (
     <details className="card">
       <summary className="cursor-pointer font-semibold text-accent">{label}</summary>
@@ -12,7 +14,7 @@ export default function EventForm({ groupId, label }: { groupId: string; label: 
           <input id={`et-${groupId}`} name="title" required maxLength={100} className="input" />
         </label>
         <label className="label" htmlFor={`ew-${groupId}`}>
-          When (Provo time)
+          When (your time, {tz.replace(/_/g, " ")})
           <input id={`ew-${groupId}`} name="startsAt" type="datetime-local" required className="input" />
         </label>
         <label className="label" htmlFor={`el-${groupId}`}>

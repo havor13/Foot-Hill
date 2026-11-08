@@ -17,12 +17,14 @@ export default function EventCard({
   event,
   going,
   showGroup = true,
+  tz,
 }: {
   event: EventView;
   going: boolean;
   showGroup?: boolean;
+  tz: string;
 }) {
-  const p = eventParts(event.startsAt);
+  const p = eventParts(event.startsAt, tz);
   return (
     <div className="card flex flex-wrap items-center gap-4 shadow-sm">
       <div className="w-14 shrink-0 rounded-xl bg-sun-soft py-1.5 text-center leading-none">

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import AvatarPicker from "@/components/AvatarPicker";
+import NotificationSettings from "@/components/NotificationSettings";
 import SubmitButton from "@/components/SubmitButton";
 import { INDUSTRIES, OPEN_TO } from "@/lib/constants";
 import { logout } from "../../(auth)/actions";
@@ -29,6 +30,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <section aria-label="Profile photo" className="card shadow-sm">
         <AvatarPicker userId={user.id} name={user.name} image={user.image} />
       </section>
+
+      <NotificationSettings publicKey={process.env.VAPID_PUBLIC_KEY ?? ""} />
 
       <form action={updateProfile} className="card grid gap-4 shadow-sm">
         <label className="label" htmlFor="name">

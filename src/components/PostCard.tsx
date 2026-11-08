@@ -3,6 +3,7 @@ import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/SubmitButton";
 import { addComment, deletePost, toggleLike } from "@/app/(app)/actions";
 import AttachmentList from "@/components/AttachmentList";
+import ReactionBar from "@/components/ReactionBar";
 import { attachmentSelect } from "@/lib/uploads.server";
 import type { AttachmentView } from "@/lib/uploads";
 import { timeAgo } from "@/lib/format";
@@ -15,6 +16,7 @@ export type PostView = {
   group: { id: string; name: string; kind: "GROUP" | "COURSE" };
   _count: { likes: number; comments: number };
   attachments: AttachmentView[];
+  reactions: { emoji: string; userId: string }[];
   likes: { userId: string }[]; // already filtered to the signed-in user
   comments: { id: string; body: string; createdAt: Date; author: { name: string; image: string | null } }[];
 };
@@ -66,7 +68,7 @@ export default function PostCard({
       {post.body && <p className="whitespace-pre-wrap break-words">{post.body}</p>}
       <AttachmentList items={post.attachments} />
 
-      <div className="flex items-center gap-1 border-t border-line pt-2">
+      <div className="flex flex-wrap items-center gap-1 border-t border-line pt-2">
         <form action={toggleLike.bind(null, post.id)}>
           <button
             type="submit"
@@ -81,6 +83,7 @@ export default function PostCard({
             {post._count.likes}
           </button>
         </form>
+        <ReactionBar postId={post.id} rows={post.reactions} meId={meId} canInteract={canInteract} />
       </div>
 
       <details>
@@ -127,6 +130,7 @@ export const postInclude = (userId: string) =>
     group: { select: { id: true, name: true, kind: true } },
     _count: { select: { likes: true, comments: true } },
     attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
+    reactions: { select: { emoji: true, userId: true } },
     likes: { where: { userId }, select: { userId: true } },
     comments: {
       orderBy: { createdAt: "asc" },

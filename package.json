@@ -16,14 +16,19 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.25",
+    "@livekit/components-styles": "^1.2.0",
     "@prisma/client": "^6.16.0",
     "@vercel/blob": "^2.8.2",
     "bcryptjs": "^3.0.2",
+    "livekit-client": "^2.23.0",
+    "livekit-server-sdk": "^2.19.2",
     "next": "^15.5.0",
     "next-auth": "5.0.0-beta.29",
     "nodemailer": "^6.10.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "web-push": "^4.0.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
@@ -32,6 +37,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/web-push": "^3.6.4",
     "prisma": "^6.16.0",
     "tailwindcss": "^4.1.0",
     "tsx": "^4.20.0",

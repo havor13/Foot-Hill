@@ -7,12 +7,14 @@ import PostCard, { postInclude } from "@/components/PostCard";
 import Composer from "@/components/Composer";
 import JoinButton from "@/components/JoinButton";
 import EventCard from "@/components/EventCard";
+import { getUserTz } from "@/lib/tz";
 import EventForm from "@/components/EventForm";
 import DeleteCourse from "@/components/DeleteCourse";
 
 export default async function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser();
+  const tz = await getUserTz();
 
   const group = await prisma.group.findUnique({
     where: { id },
@@ -82,7 +84,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
             <section className="grid gap-3" aria-label="Upcoming events">
               <h2 className="text-lg font-bold">{isCourse ? "Study sessions" : "Upcoming events"}</h2>
               {events.map((e) => (
-                <EventCard key={e.id} event={e} going={e.rsvps.length > 0} showGroup={false} />
+                <EventCard key={e.id} event={e} going={e.rsvps.length > 0} showGroup={false} tz={tz} />
               ))}
             </section>
           )}

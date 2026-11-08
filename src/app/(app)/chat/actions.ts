@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { attachmentRows, attachmentSelect, parseAttachments } from "@/lib/uploads.server";
 import type { AttachmentView } from "@/lib/uploads";
+import { notifyNewMessage } from "@/lib/push";
+import { isReactionEmoji, summarizeReactions, type ReactionSummary } from "@/lib/reactions";
 
 export type ChatMsg = {
   id: string;
@@ -15,6 +18,7 @@ export type ChatMsg = {
   body: string;
   createdAt: string; // ISO string, safe to pass to the browser
   attachments: AttachmentView[];
+  reactions: ReactionSummary;
 };
 
 export type SendResult = { ok: true; message: ChatMsg } | { ok: false; error: string };
@@ -55,6 +59,17 @@ export async function sendMessage(
     data: { lastReadAt: message.createdAt },
   });
 
+  // Runs after the reply is sent, so a slow push service never delays the chat.
+  after(() =>
+    notifyNewMessage({
+      conversationId,
+      senderId: user.id,
+      senderName: user.name,
+      body: message.body,
+      attachmentKind: message.attachments[0]?.kind,
+    }).catch((e) => console.error("Could not send notifications:", e)),
+  );
+
   return {
     ok: true,
     message: {
@@ -64,8 +79,36 @@ export async function sendMessage(
       body: message.body,
       createdAt: message.createdAt.toISOString(),
       attachments: message.attachments,
+      reactions: [],
     },
   };
+}
+
+export type ReactResult = { ok: true; reactions: ReactionSummary } | { ok: false; error: string };
+
+/** Adds or removes the signed-in student's emoji reaction on a message in a chat they belong to. */
+export async function toggleMessageReaction(messageId: string, emoji: string): Promise<ReactResult> {
+  const user = await requireUser();
+  if (!isReactionEmoji(emoji)) return { ok: false, error: "That reaction is not available." };
+
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, conversation: { members: { some: { userId: user.id } } } },
+    select: { id: true },
+  });
+  if (!message) return { ok: false, error: "You are not in this chat." };
+
+  const existing = await prisma.reaction.findFirst({ where: { userId: user.id, messageId, emoji }, select: { id: true } });
+  if (existing) await prisma.reaction.deleteMany({ where: { id: existing.id } });
+  else {
+    try {
+      await prisma.reaction.create({ data: { userId: user.id, messageId, emoji } });
+    } catch {
+      // Two quick taps can race. One row survives, which is the intended result.
+    }
+  }
+
+  const rows = await prisma.reaction.findMany({ where: { messageId }, select: { emoji: true, userId: true } });
+  return { ok: true, reactions: summarizeReactions(rows, user.id) };
 }
 
 export async function createGroupChat(formData: FormData): Promise<void> {

@@ -6,8 +6,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { getOrCreateDm } from "@/lib/chat";
-import { provoLocalToDate } from "@/lib/format";
+import { localToDate } from "@/lib/format";
+import { getUserTz } from "@/lib/tz";
 import { INDUSTRIES, OPEN_TO } from "@/lib/constants";
+import { isReactionEmoji } from "@/lib/reactions";
 import { attachmentRows, isOwnAvatarUrl, parseAttachments, removeBlobs } from "@/lib/uploads.server";
 
 const refresh = () => revalidatePath("/", "layout");
@@ -63,6 +65,27 @@ export async function toggleLike(postId: string): Promise<void> {
   const existing = await prisma.like.findUnique({ where: key });
   if (existing) await prisma.like.delete({ where: key });
   else await prisma.like.create({ data: { userId: user.id, postId } });
+  refresh();
+}
+
+/** Adds or removes the signed-in student's emoji reaction on a post in a group they have joined. */
+export async function toggleReaction(postId: string, emoji: string): Promise<void> {
+  const user = await requireUser();
+  if (!isReactionEmoji(emoji)) return;
+  const post = await prisma.post.findFirst({
+    where: { id: postId, group: { memberships: { some: { userId: user.id } } } },
+    select: { id: true },
+  });
+  if (!post) return;
+  const existing = await prisma.reaction.findFirst({ where: { userId: user.id, postId, emoji }, select: { id: true } });
+  if (existing) await prisma.reaction.deleteMany({ where: { id: existing.id } });
+  else {
+    try {
+      await prisma.reaction.create({ data: { userId: user.id, postId, emoji } });
+    } catch {
+      // A double tap can race with itself. The unique rule keeps one row, which is what we want.
+    }
+  }
   refresh();
 }
 
@@ -242,7 +265,7 @@ export async function createEvent(formData: FormData): Promise<void> {
       location: formData.get("location"),
       description: text(formData.get("description")) || undefined,
     });
-  const startsAt = provoLocalToDate(text(formData.get("startsAt")));
+  const startsAt = localToDate(text(formData.get("startsAt")), await getUserTz());
   if (!parsed.success || !startsAt) return;
   if (!(await isMember(user.id, parsed.data.groupId))) return;
 

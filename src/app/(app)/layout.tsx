@@ -4,12 +4,15 @@ import { unreadByConversation } from "@/lib/chat";
 import Nav from "@/components/Nav";
 import Avatar from "@/components/Avatar";
 import Logo from "@/components/Logo";
+import TimeZoneSync from "@/components/TimeZoneSync";
+import CallProvider from "@/components/CallProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser({ allowPendingAlumni: true });
   const unread = Object.values(await unreadByConversation(user.id)).reduce((a, b) => a + b, 0);
 
   return (
+    <CallProvider>
     <div className="mx-auto grid max-w-6xl gap-6 px-4 pb-24 pt-5 md:grid-cols-[220px_minmax(0,1fr)] md:pb-10">
       <aside className="grid content-start gap-5 md:sticky md:top-5 md:self-start">
         <Link href="/feed" className="flex items-center gap-2.5 font-display text-xl font-bold">
@@ -29,6 +32,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </Link>
       </aside>
       <main className="min-w-0">{children}</main>
+      <TimeZoneSync />
     </div>
+    </CallProvider>
   );
 }

@@ -1,27 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { sendMessage, type ChatMsg } from "@/app/(app)/chat/actions";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sendMessage, toggleMessageReaction, type ChatMsg } from "@/app/(app)/chat/actions";
+import { REACTION_EMOJIS, sameReactions, type ReactionSummary } from "@/lib/reactions";
 import { isImageType, UPLOAD_NOTE, type AttachmentInput } from "@/lib/uploads";
 import { useAttachmentUploader } from "@/components/useAttachmentUploader";
 import { AttachButton, AttachChips } from "@/components/AttachControls";
 import AttachmentList from "@/components/AttachmentList";
 
-const TZ = "America/Denver";
 const POLL_MS = 3000;
 
 type Row = ChatMsg & { state?: "sending" | "failed" };
 
-const timeFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ });
-const dayKeyFmt = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: TZ });
-const dayLabelFmt = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ });
+/** Formats times in the reader's own time zone. The server does not know it, so this runs in the browser only. */
+function makeFormats(timeZone: string) {
+  return {
+    time: new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone }),
+    dayKey: new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone }),
+    dayLabel: new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone }),
+  };
+}
+type Formats = ReturnType<typeof makeFormats>;
 
-function dayLabel(iso: string): string {
+function dayLabel(iso: string, f: Formats): string {
   const d = new Date(iso);
-  const key = dayKeyFmt.format(d);
-  if (key === dayKeyFmt.format(new Date())) return "Today";
-  if (key === dayKeyFmt.format(new Date(Date.now() - 86_400_000))) return "Yesterday";
-  return dayLabelFmt.format(d);
+  const key = f.dayKey.format(d);
+  if (key === f.dayKey.format(new Date())) return "Today";
+  if (key === f.dayKey.format(new Date(Date.now() - 86_400_000))) return "Yesterday";
+  return f.dayLabel.format(d);
 }
 
 function mergeRows(prev: Row[], incoming: ChatMsg[]): Row[] {
@@ -29,6 +35,19 @@ function mergeRows(prev: Row[], incoming: ChatMsg[]): Row[] {
   const fresh = incoming.filter((m) => !known.has(m.id));
   if (!fresh.length) return prev;
   return [...prev, ...fresh].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Applies the reaction counts the server sent for recent messages, leaving other rows alone. */
+function applyReactions(prev: Row[], incoming: Record<string, ReactionSummary>, since: string): Row[] {
+  let changed = false;
+  const next = prev.map((r) => {
+    if (r.state || r.createdAt < since) return r;
+    const fresh = incoming[r.id] ?? [];
+    if (sameReactions(r.reactions, fresh)) return r;
+    changed = true;
+    return { ...r, reactions: fresh };
+  });
+  return changed ? next : prev;
 }
 
 function Ticks({ read }: { read: boolean }) {
@@ -62,10 +81,16 @@ export default function ChatThread({
   const [othersReadAt, setOthersReadAt] = useState<string | null>(initialOthersReadAt);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [timeZone, setTimeZone] = useState<string | null>(null);
+  const [picker, setPicker] = useState<string | null>(null); // message whose emoji picker is open
   const uploader = useAttachmentUploader(meId);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true); // keep the view pinned to the newest message unless the reader scrolled up
   const cursor = useRef<string>(initial.at(-1)?.createdAt ?? new Date(0).toISOString());
+
+  // Times need the browser's time zone, so they appear right after the page loads.
+  useEffect(() => setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"), []);
+  const formats = useMemo(() => (timeZone ? makeFormats(timeZone) : null), [timeZone]);
 
   // Track the newest confirmed message so each poll only asks for what is new.
   useEffect(() => {
@@ -87,9 +112,14 @@ export default function ChatThread({
         { cache: "no-store" },
       );
       if (!res.ok) return;
-      const data: { messages: ChatMsg[]; othersReadAt: string | null } = await res.json();
+      const data: {
+        messages: ChatMsg[];
+        othersReadAt: string | null;
+        reactions: Record<string, ReactionSummary>;
+        reactionsSince: string;
+      } = await res.json();
       setOthersReadAt(data.othersReadAt);
-      if (data.messages.length) setRows((prev) => mergeRows(prev, data.messages));
+      setRows((prev) => applyReactions(data.messages.length ? mergeRows(prev, data.messages) : prev, data.reactions, data.reactionsSince));
     } catch {
       // Offline or the server restarted. The next tick tries again.
     }
@@ -140,10 +170,32 @@ export default function ChatThread({
         body,
         createdAt: new Date().toISOString(),
         attachments: files.map((f, i) => ({ ...f, id: `${tempId}-${i}`, kind: isImageType(f.contentType) ? "IMAGE" : "FILE" })),
+        reactions: [],
         state: "sending",
       },
     ]);
     void deliver(tempId, body, files);
+  }
+
+  async function react(messageId: string, emoji: string) {
+    setPicker(null);
+    const flip = (list: ReactionSummary): ReactionSummary => {
+      const existing = list.find((x) => x.emoji === emoji);
+      const merged = existing
+        ? list.flatMap((x) =>
+            x.emoji !== emoji ? [x] : x.mine ? (x.count > 1 ? [{ ...x, count: x.count - 1, mine: false }] : []) : [{ ...x, count: x.count + 1, mine: true }],
+          )
+        : [...list, { emoji, count: 1, mine: true }];
+      return REACTION_EMOJIS.filter((e) => merged.some((x) => x.emoji === e)).map((e) => merged.find((x) => x.emoji === e)!);
+    };
+    setRows((prev) => prev.map((r) => (r.id === messageId ? { ...r, reactions: flip(r.reactions) } : r)));
+    const result = await toggleMessageReaction(messageId, emoji).catch(() => null);
+    if (!result || !result.ok) {
+      setError(result && !result.ok ? result.error : "Could not save the reaction.");
+      setRows((prev) => prev.map((r) => (r.id === messageId ? { ...r, reactions: flip(r.reactions) } : r))); // undo
+      return;
+    }
+    setRows((prev) => prev.map((r) => (r.id === messageId ? { ...r, reactions: result.reactions } : r)));
   }
 
   function retry(row: Row) {
@@ -172,8 +224,8 @@ export default function ChatThread({
         )}
         {rows.map((m) => {
           const mine = m.senderId === meId;
-          const day = dayLabel(m.createdAt);
-          const showDay = day !== lastDay;
+          const day = formats ? dayLabel(m.createdAt, formats) : "";
+          const showDay = Boolean(day) && day !== lastDay;
           lastDay = day;
           const read = mine && !isGroup && othersReadAt !== null && new Date(othersReadAt) >= new Date(m.createdAt);
           return (
@@ -192,6 +244,49 @@ export default function ChatThread({
                   {isGroup && !mine && <b className="block text-xs text-accent">{m.senderName}</b>}
                   {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
                   <AttachmentList items={m.attachments} compact />
+                  {!m.state && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {m.reactions.map((r) => (
+                        <button
+                          key={r.emoji}
+                          type="button"
+                          onClick={() => void react(m.id, r.emoji)}
+                          aria-pressed={r.mine}
+                          aria-label={`${r.emoji} ${r.count}${r.mine ? ", you reacted" : ""}`}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                            r.mine ? "border-accent bg-accent-soft text-accent" : "border-line bg-surface text-muted"
+                          }`}
+                        >
+                          <span aria-hidden="true">{r.emoji}</span>
+                          {r.count}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setPicker(picker === m.id ? null : m.id)}
+                        aria-expanded={picker === m.id}
+                        aria-label="Add a reaction"
+                        className="rounded-full border border-transparent px-1.5 py-0.5 text-xs text-muted hover:border-line"
+                      >
+                        {picker === m.id ? "Close" : "+ 😊"}
+                      </button>
+                      {picker === m.id && (
+                        <div role="group" aria-label="Choose a reaction" className="flex w-full flex-wrap gap-1 rounded-xl border border-line bg-surface p-1">
+                          {REACTION_EMOJIS.map((e) => (
+                            <button
+                              key={e}
+                              type="button"
+                              onClick={() => void react(m.id, e)}
+                              aria-label={`React with ${e}`}
+                              className="rounded-lg px-2 py-1 text-lg hover:bg-surface2"
+                            >
+                              {e}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center justify-end gap-1.5 text-[11px] text-muted">
                     {m.state === "failed" ? (
                       <>
@@ -204,7 +299,7 @@ export default function ChatThread({
                       <span>Sending…</span>
                     ) : (
                       <>
-                        <span>{timeFmt.format(new Date(m.createdAt))}</span>
+                        <span>{formats ? formats.time.format(new Date(m.createdAt)) : ""}</span>
                         {mine && !isGroup && <Ticks read={read} />}
                       </>
                     )}
