@@ -88,6 +88,7 @@ export async function startCall(conversationId: string, kind: CallKindName): Pro
       body: `${convo.isGroup ? `${user.name.split(" ")[0]} started` : "Incoming"} ${kind === "VIDEO" ? "video" : "audio"} call. Tap to join.`,
       url: `/chat/${conversationId}`,
       tag: `call-${newCallId}`,
+      sticky: true,
     }).catch((e) => console.error("Could not send call notifications:", e)),
   );
 

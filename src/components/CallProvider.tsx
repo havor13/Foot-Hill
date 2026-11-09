@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import { joinCall, leaveCall, pingCall, startCall, type CallResult, type CallSession } from "@/app/(app)/call-actions";
 
 type Kind = "AUDIO" | "VIDEO";
@@ -17,8 +18,34 @@ type CallContext = {
 const Ctx = createContext<CallContext>({ start: async () => {}, busy: false, inCall: false });
 export const useCalls = () => useContext(Ctx);
 
-const POLL_MS = 5000;
+const POLL_MS = 4000;
 const PING_MS = 15000;
+
+/** A short double ring and a buzz. Browsers only allow sound after the student has tapped something on the site. */
+function ring() {
+  try {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AC();
+    [0, 0.4, 1.4, 1.8].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.value = 0.08;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.28);
+    });
+    setTimeout(() => void ctx.close().catch(() => undefined), 3000);
+  } catch {
+    // No audio available. The banner is still there.
+  }
+  try {
+    navigator.vibrate?.([300, 150, 300]);
+  } catch {
+    // Not supported on this device.
+  }
+}
 
 const LiveCall = dynamic(() => import("@/components/LiveCall"), {
   ssr: false,
@@ -64,6 +91,8 @@ export default function CallProvider({ children }: { children: React.ReactNode }
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pathname = usePathname();
+  const rung = useRef<Set<string>>(new Set());
 
   const open = useCallback((result: CallResult) => {
     if (result.ok) {
@@ -99,7 +128,6 @@ export default function CallProvider({ children }: { children: React.ReactNode }
     if (session) return;
     let stopped = false;
     async function check() {
-      if (document.hidden) return;
       try {
         const res = await fetch("/api/calls/active", { cache: "no-store" });
         if (!res.ok || stopped) return;
@@ -111,13 +139,18 @@ export default function CallProvider({ children }: { children: React.ReactNode }
     }
     void check();
     const timer = setInterval(check, POLL_MS);
+    // Look again straight away when the student comes back to the tab, regains internet or opens another page.
     document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    window.addEventListener("online", check);
     return () => {
       stopped = true;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+      window.removeEventListener("online", check);
     };
-  }, [session]);
+  }, [session, pathname]);
 
   const closeCall = useCallback(() => {
     setSession(null);
@@ -126,6 +159,14 @@ export default function CallProvider({ children }: { children: React.ReactNode }
 
   const value = useMemo(() => ({ start, busy, inCall: session !== null }), [start, busy, session]);
   const banners = session ? [] : incoming.filter((c) => !dismissed.includes(c.id));
+
+  // Ring once for each new call.
+  useEffect(() => {
+    const fresh = banners.filter((b) => !rung.current.has(b.id));
+    if (!fresh.length) return;
+    fresh.forEach((b) => rung.current.add(b.id));
+    ring();
+  });
 
   return (
     <Ctx.Provider value={value}>

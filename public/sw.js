@@ -27,6 +27,9 @@ self.addEventListener("push", (event) => {
         badge: "/icon-192.png",
         tag: data.tag || undefined,
         renotify: Boolean(data.tag),
+        // A call stays on screen until it is tapped, and buzzes where the device allows it.
+        requireInteraction: Boolean(data.sticky),
+        vibrate: data.sticky ? [300, 150, 300, 150, 300] : undefined,
         data: { url: url.href },
       });
     })(),

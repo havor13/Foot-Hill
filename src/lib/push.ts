@@ -1,7 +1,7 @@
 import * as webpush from "web-push";
 import { prisma } from "@/lib/db";
 
-export type PushPayload = { title: string; body: string; url: string; tag?: string; force?: boolean };
+export type PushPayload = { title: string; body: string; url: string; tag?: string; force?: boolean; sticky?: boolean };
 
 let ready: boolean | null = null;
 
