@@ -121,6 +121,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <DeleteAccount />
 
       <p className="text-xs text-muted">
+        <Link href="/help" className="underline hover:text-ink">
+          Help
+        </Link>{" "}
+        ·{" "}
         <Link href="/privacy" className="underline hover:text-ink">
           Privacy policy
         </Link>{" "}

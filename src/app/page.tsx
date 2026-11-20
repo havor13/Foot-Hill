@@ -56,6 +56,10 @@ export default async function LandingPage() {
 
       <p className="text-xs text-muted">
         An independent student project. Not affiliated with BYU or The Church of Jesus Christ of Latter-day Saints.{" "}
+        <Link href="/help" className="underline hover:text-ink">
+          Help
+        </Link>{" "}
+        ·{" "}
         <Link href="/privacy" className="underline hover:text-ink">
           Privacy
         </Link>{" "}

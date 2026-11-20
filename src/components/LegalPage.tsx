@@ -6,13 +6,15 @@ export default function LegalPage({
   title,
   updated,
   children,
+  wide,
 }: {
   title: string;
   updated: string;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
-    <main className="mx-auto grid max-w-2xl gap-6 px-4 py-10">
+    <main className={`mx-auto grid gap-6 px-4 py-10 ${wide ? "max-w-3xl" : "max-w-2xl"}`}>
       <Link href="/" className="flex items-center gap-2.5 font-display text-xl font-bold">
         <Logo />
         Foothill Commons
@@ -25,6 +27,9 @@ export default function LegalPage({
         {children}
       </article>
       <nav aria-label="Legal pages" className="flex gap-4 text-sm text-muted">
+        <Link href="/help" className="underline hover:text-ink">
+          Help
+        </Link>
         <Link href="/privacy" className="underline hover:text-ink">
           Privacy policy
         </Link>

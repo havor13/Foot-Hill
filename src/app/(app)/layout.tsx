@@ -35,6 +35,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <footer className="border-t border-line pt-4 text-xs text-muted md:col-span-2">
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>© {new Date().getFullYear()} Foothill Commons</span>
+          <Link href="/help" className="underline hover:text-ink">
+            Help
+          </Link>
           <Link href="/privacy" className="underline hover:text-ink">
             Privacy
           </Link>
