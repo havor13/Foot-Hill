@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import Avatar from "@/components/Avatar";
 import SubmitButton from "@/components/SubmitButton";
+import AdminTabs from "@/components/AdminTabs";
 import { approveAlumni } from "../../actions";
 
 export const metadata = { title: "Review alumni" };
@@ -11,6 +12,7 @@ export default async function AdminAlumniPage() {
   const user = await requireUser();
   if (!user.isAdmin) notFound();
 
+  const openReports = await prisma.report.count({ where: { status: "OPEN" } });
   const pending = await prisma.alumniProfile.findMany({
     where: { approved: false, user: { emailVerified: { not: null } } },
     orderBy: { user: { createdAt: "asc" } },
@@ -19,6 +21,7 @@ export default async function AdminAlumniPage() {
 
   return (
     <div className="grid gap-4">
+      <AdminTabs current="alumni" openReports={openReports} />
       <div>
         <h1 className="page-title">Review alumni</h1>
         <p className="text-muted">

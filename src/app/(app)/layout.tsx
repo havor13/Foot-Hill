@@ -32,6 +32,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </Link>
       </aside>
       <main className="min-w-0">{children}</main>
+      <footer className="border-t border-line pt-4 text-xs text-muted md:col-span-2">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>© {new Date().getFullYear()} Foothill Commons</span>
+          <Link href="/privacy" className="underline hover:text-ink">
+            Privacy
+          </Link>
+          <Link href="/terms" className="underline hover:text-ink">
+            Terms
+          </Link>
+          <Link href="/settings" className="underline hover:text-ink">
+            Settings
+          </Link>
+        </p>
+        <p className="mt-1">An independent student project. Not affiliated with BYU, BYU-Pathway or The Church of Jesus Christ of Latter-day Saints.</p>
+      </footer>
       <TimeZoneSync />
     </div>
     </CallProvider>

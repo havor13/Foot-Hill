@@ -7,7 +7,7 @@ import SubmitButton from "@/components/SubmitButton";
 
 export default function SignupPage() {
   const [state, action] = useActionState<FormState, FormData>(signup, {});
-  const [role, setRole] = useState<"STUDENT" | "ALUMNI">("STUDENT");
+  const [role, setRole] = useState<"STUDENT" | "ALUMNI" | "GUEST">("STUDENT");
 
   return (
     <form action={action} className="card grid gap-4 shadow-sm">
@@ -18,9 +18,9 @@ export default function SignupPage() {
         </p>
       </div>
 
-      <fieldset className="grid grid-cols-2 gap-2">
+      <fieldset className="grid grid-cols-3 gap-2">
         <legend className="sr-only">I am a</legend>
-        {(["STUDENT", "ALUMNI"] as const).map((r) => (
+        {(["STUDENT", "ALUMNI", "GUEST"] as const).map((r) => (
           <label
             key={r}
             className={`cursor-pointer rounded-xl border px-3 py-2 text-center text-sm font-semibold ${role === r ? "border-accent bg-accent-soft text-accent" : "border-line text-muted"}`}
@@ -33,7 +33,7 @@ export default function SignupPage() {
               onChange={() => setRole(r)}
               className="sr-only"
             />
-            {r === "STUDENT" ? "Current student" : "Alumni"}
+            {r === "STUDENT" ? "Student" : r === "ALUMNI" ? "Alumni" : "Guest"}
           </label>
         ))}
       </fieldset>
@@ -54,6 +54,16 @@ export default function SignupPage() {
           className="input"
         />
       </label>
+      {role === "GUEST" && (
+        <label className="label" htmlFor="inviteCode">
+          Invite code
+          <input id="inviteCode" name="inviteCode" autoComplete="off" required className="input" />
+          <span className="text-xs font-normal text-muted">
+            For invited testers and school leaders. You will get your code from the person who invited you. A guest account
+            can be removed after the test.
+          </span>
+        </label>
+      )}
       <label className="label" htmlFor="major">
         Major
         <input id="major" name="major" className="input" placeholder="For example, Nursing" />
@@ -76,6 +86,21 @@ export default function SignupPage() {
           contacting.
         </p>
       )}
+
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="agree" required className="mt-1 h-4 w-4 accent-[var(--accent)]" />
+        <span>
+          I am 18 or older and agree to the{" "}
+          <Link href="/terms" target="_blank" className="font-semibold text-accent underline">
+            Terms of use
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" target="_blank" className="font-semibold text-accent underline">
+            Privacy policy
+          </Link>
+          .
+        </span>
+      </label>
 
       <p role="alert" className="min-h-5 text-sm text-danger">
         {state.error}

@@ -4,6 +4,8 @@ import SubmitButton from "@/components/SubmitButton";
 import { addComment, deletePost, toggleLike } from "@/app/(app)/actions";
 import AttachmentList from "@/components/AttachmentList";
 import ReactionBar from "@/components/ReactionBar";
+import ReportPanel from "@/components/ReportPanel";
+import { reportComment, reportPost } from "@/app/(app)/report-actions";
 import { attachmentSelect } from "@/lib/uploads.server";
 import type { AttachmentView } from "@/lib/uploads";
 import { timeAgo } from "@/lib/format";
@@ -18,7 +20,14 @@ export type PostView = {
   attachments: AttachmentView[];
   reactions: { emoji: string; userId: string }[];
   likes: { userId: string }[]; // already filtered to the signed-in user
-  comments: { id: string; body: string; createdAt: Date; author: { name: string; image: string | null } }[];
+  reports: { id: string }[]; // the signed-in user's own report of this post, if any
+  comments: {
+    id: string;
+    body: string;
+    createdAt: Date;
+    author: { id: string; name: string; image: string | null };
+    reports: { id: string }[];
+  }[];
 };
 
 export default function PostCard({
@@ -49,12 +58,16 @@ export default function PostCard({
             {timeAgo(post.createdAt)}
           </span>
         </div>
-        {post.author.id === meId && (
+        {post.author.id === meId ? (
           <form action={deletePost.bind(null, post.id)} className="ml-auto">
             <button type="submit" className="text-xs text-muted underline hover:text-danger">
               Delete
             </button>
           </form>
+        ) : (
+          <div className="ml-auto">
+            <ReportPanel action={reportPost.bind(null, post.id)} reported={post.reports.length > 0} id={`p-${post.id}`} />
+          </div>
         )}
       </header>
 
@@ -98,6 +111,11 @@ export default function PostCard({
               <div className="min-w-0 rounded-xl bg-surface2 px-3 py-1.5 text-sm">
                 <b className="block text-xs">{c.author.name}</b>
                 <span className="break-words">{c.body}</span>
+                {c.author.id !== meId && (
+                  <div className="mt-0.5">
+                    <ReportPanel action={reportComment.bind(null, c.id)} reported={c.reports.length > 0} id={`c-${c.id}`} align="left" />
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -132,9 +150,16 @@ export const postInclude = (userId: string) =>
     attachments: { select: attachmentSelect, orderBy: { createdAt: "asc" } },
     reactions: { select: { emoji: true, userId: true } },
     likes: { where: { userId }, select: { userId: true } },
+    reports: { where: { reporterId: userId }, select: { id: true } },
     comments: {
       orderBy: { createdAt: "asc" },
       take: 30,
-      select: { id: true, body: true, createdAt: true, author: { select: { name: true, image: true } } },
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        author: { select: { id: true, name: true, image: true } },
+        reports: { where: { reporterId: userId }, select: { id: true } },
+      },
     },
   }) as const;

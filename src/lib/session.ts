@@ -10,6 +10,7 @@ const loadUser = cache(async (id: string) =>
 /**
  * Returns the signed-in user, or redirects.
  *
+ * - Suspended accounts are sent to /suspended.
  * - Unverified accounts are sent to /verify unless the caller passes allowUnverified.
  * - Alumni can sign up with any email, so until a reviewer approves their profile they can only
  *   reach their own settings page (allowPendingAlumni). Admins are exempt.
@@ -19,6 +20,7 @@ export async function requireUser(opts?: { allowUnverified?: boolean; allowPendi
   if (!session?.user?.id) redirect("/login");
   const user = await loadUser(session.user.id);
   if (!user) redirect("/login");
+  if (user.suspendedAt) redirect("/suspended");
   if (!user.emailVerified && !opts?.allowUnverified) redirect("/verify");
 
   const pendingAlumnus = user.role === "ALUMNI" && !user.alumni?.approved && !user.isAdmin;

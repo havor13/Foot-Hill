@@ -28,7 +28,7 @@ export default function Nav({ unread, isAdmin }: { unread: number; isAdmin: bool
     { href: "/events", label: "Events", icon: "events" },
     { href: "/people", label: "People", icon: "people" },
     { href: "/chat", label: "Chat", icon: "chat", badge: unread },
-    ...(isAdmin ? [{ href: "/admin/alumni", label: "Review", icon: "admin" }] : []),
+    ...(isAdmin ? [{ href: "/admin", label: "Review", icon: "admin" }] : []),
     { href: "/settings", label: "Me", icon: "me", mobileOnly: true },
   ];
 

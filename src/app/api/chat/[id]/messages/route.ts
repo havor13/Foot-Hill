@@ -23,13 +23,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (Number.isNaN(after.getTime())) return Response.json({ error: "Bad cursor." }, { status: 400 });
 
   const [me, member] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { emailVerified: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { emailVerified: true, suspendedAt: true } }),
     prisma.conversationMember.findUnique({
       where: { conversationId_userId: { conversationId: id, userId } },
       select: { userId: true },
     }),
   ]);
-  if (!me?.emailVerified || !member) return Response.json({ error: "Chat not found." }, { status: 404 });
+  if (!me?.emailVerified || me.suspendedAt || !member) return Response.json({ error: "Chat not found." }, { status: 404 });
 
   // Reactions on messages the window already holds can change, so recent ones are sent on every poll.
   const reactionsSince = new Date(Date.now() - REACTION_WINDOW_MS);

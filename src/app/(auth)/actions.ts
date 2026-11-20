@@ -9,6 +9,8 @@ import { auth, signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
 import { sendVerificationCode } from "@/lib/mail";
 import { STUDENT_EMAIL } from "@/lib/constants";
+import { deleteUserCompletely } from "@/lib/account";
+import { requireUser } from "@/lib/session";
 
 export type FormState = { error?: string; message?: string };
 
@@ -34,7 +36,7 @@ const signupSchema = z.object({
   name: z.string().trim().min(2, "Enter your full name.").max(80),
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
   password: z.string().min(8, "Use at least 8 characters.").max(100),
-  role: z.enum(["STUDENT", "ALUMNI"]),
+  role: z.enum(["STUDENT", "ALUMNI", "GUEST"]),
   major: z.string().trim().max(80).optional(),
   gradYear: z.coerce.number().int().min(1950).max(2100).optional(),
 });
@@ -50,7 +52,16 @@ export async function signup(_prev: FormState, formData: FormData): Promise<Form
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   const { name, email, password, role, major, gradYear } = parsed.data;
+  if (formData.get("agree") !== "on") return { error: "Please agree to the terms of use and privacy policy to continue." };
 
+  const isGuest = role === "GUEST";
+  if (isGuest) {
+    const expected = process.env.GUEST_INVITE_CODE?.trim();
+    const given = String(formData.get("inviteCode") ?? "").trim();
+    const a = crypto.createHash("sha256").update(given).digest();
+    const b = crypto.createHash("sha256").update(expected ?? "").digest();
+    if (!expected || !crypto.timingSafeEqual(a, b)) return { error: "That invite code is not right. Ask the person who invited you." };
+  }
   if (role === "STUDENT" && !BYU_EMAIL.test(email)) {
     return { error: "Students sign up with a school email that ends in @byu.edu or @byupathway.edu." };
   }
@@ -62,7 +73,7 @@ export async function signup(_prev: FormState, formData: FormData): Promise<Form
   if (existing) return { error: "An account with that email already exists. Try signing in." };
 
   const user = await prisma.user.create({
-    data: { name, email, role, major, gradYear, passwordHash: await bcrypt.hash(password, 12) },
+    data: { name, email, role: isGuest ? "STUDENT" : role, isGuest, major: isGuest ? major || "Guest tester" : major, gradYear, passwordHash: await bcrypt.hash(password, 12), termsAcceptedAt: new Date() },
   });
 
   try {
@@ -158,4 +169,27 @@ export async function resendCode(): Promise<FormState> {
 
 export async function logout(): Promise<void> {
   await signOut({ redirectTo: "/" });
+}
+
+/**
+ * Permanently deletes the signed-in person's account after they re-enter their password.
+ * Their posts, comments, reactions, messages and memberships go with them (the database cascades),
+ * one-to-one chats are removed for both people, and their uploaded files are deleted from storage.
+ */
+export async function deleteAccount(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser({ allowPendingAlumni: true });
+  const password = String(formData.get("password") ?? "");
+  if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") {
+    return { error: "Type DELETE in the box to confirm." };
+  }
+  const row = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true, isAdmin: true } });
+  if (!row || !(await bcrypt.compare(password, row.passwordHash))) return { error: "That password is not right." };
+
+  if (row.isAdmin && (await prisma.user.count({ where: { isAdmin: true } })) <= 1) {
+    return { error: "You are the only admin. Make someone else an admin before deleting this account." };
+  }
+
+  await deleteUserCompletely(user.id);
+  await signOut({ redirectTo: "/" });
+  return {};
 }

@@ -22,7 +22,7 @@ Independent student project. Not affiliated with BYU or The Church of Jesus Chri
 | People | Student directory with a Message button (students only). |
 | Chat | Direct messages, group chats, unread badges, read ticks in direct messages. |
 | Uploads | Attach up to 4 photos or documents (10 MB each) to a post or a chat message. Files live in Vercel Blob. |
-| Admin | `/admin/alumni` lists alumni profiles waiting for review. |
+| Admin | `/admin/alumni` lists alumni profiles waiting for review. `/admin/reports` lists reported posts, comments and messages: remove, pause the author, or dismiss. |
 
 ### How access works
 
@@ -99,7 +99,7 @@ with a Join button wherever they are in the app, and get a push notification if 
   hard to guess, but they are not private. There is no virus scanning, only a check of file type and size.
   Deleting a post deletes its files, but chat files stay until the Blob store is cleaned up by hand.
 - **No rate limiting** on sign in, verification codes or messages. Add one (for example Upstash Ratelimit) before launch.
-- **No moderation tools** beyond alumni review: no reporting, blocking or admin deletion of posts.
+- **Basic moderation only.** Students can report posts, comments and chat messages. Admins review them, remove the item or pause the author. There is no blocking between students, no automatic filtering, and no appeals process.
 - **Alumni review is manual.** Approving means checking the person yourself.
 - Schema changes use `prisma db push`. Switch to `prisma migrate` once real data exists.
 - Courses are seeded from a short list in `prisma/seed.ts`, not from BYU's catalog.

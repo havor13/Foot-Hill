@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendMessage, toggleMessageReaction, type ChatMsg } from "@/app/(app)/chat/actions";
 import { REACTION_EMOJIS, sameReactions, type ReactionSummary } from "@/lib/reactions";
+import { REPORT_REASONS } from "@/lib/moderation";
+import { reportMessage } from "@/app/(app)/report-actions";
 import { isImageType, UPLOAD_NOTE, type AttachmentInput } from "@/lib/uploads";
 import { useAttachmentUploader } from "@/components/useAttachmentUploader";
 import { AttachButton, AttachChips } from "@/components/AttachControls";
@@ -82,6 +84,8 @@ export default function ChatThread({
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [timeZone, setTimeZone] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<string | null>(null); // message whose report reasons are open
+  const [reported, setReported] = useState<string[]>([]);
   const [picker, setPicker] = useState<string | null>(null); // message whose emoji picker is open
   const uploader = useAttachmentUploader(meId);
   const scroller = useRef<HTMLDivElement>(null);
@@ -198,6 +202,13 @@ export default function ChatThread({
     setRows((prev) => prev.map((r) => (r.id === messageId ? { ...r, reactions: result.reactions } : r)));
   }
 
+  async function report(messageId: string, reason: string) {
+    setReporting(null);
+    const result = await reportMessage(messageId, reason).catch(() => null);
+    if (result?.ok) setReported((prev) => [...prev, messageId]);
+    else setError(result && !result.ok ? result.error : "Could not send the report.");
+  }
+
   function retry(row: Row) {
     setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, state: "sending" as const } : r)));
     setError("");
@@ -270,6 +281,28 @@ export default function ChatThread({
                       >
                         {picker === m.id ? "Close" : "+ 😊"}
                       </button>
+                      {!mine &&
+                        (reported.includes(m.id) ? (
+                          <span className="text-[11px] text-muted">Reported</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setReporting(reporting === m.id ? null : m.id)}
+                            aria-expanded={reporting === m.id}
+                            className="rounded-full px-1.5 py-0.5 text-[11px] text-muted underline hover:text-danger"
+                          >
+                            Report
+                          </button>
+                        ))}
+                      {reporting === m.id && (
+                        <div role="group" aria-label="Why are you reporting this message?" className="flex w-full flex-wrap gap-1 rounded-xl border border-line bg-surface p-1">
+                          {REPORT_REASONS.map((r) => (
+                            <button key={r.value} type="button" onClick={() => void report(m.id, r.value)} className="rounded-lg px-2 py-1 text-xs hover:bg-surface2">
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {picker === m.id && (
                         <div role="group" aria-label="Choose a reaction" className="flex w-full flex-wrap gap-1 rounded-xl border border-line bg-surface p-1">
                           {REACTION_EMOJIS.map((e) => (

@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import AvatarPicker from "@/components/AvatarPicker";
+import DeleteAccount from "@/components/DeleteAccount";
 import NotificationSettings from "@/components/NotificationSettings";
 import SubmitButton from "@/components/SubmitButton";
 import { INDUSTRIES, OPEN_TO } from "@/lib/constants";
@@ -115,6 +117,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           Sign out
         </button>
       </form>
+
+      <DeleteAccount />
+
+      <p className="text-xs text-muted">
+        <Link href="/privacy" className="underline hover:text-ink">
+          Privacy policy
+        </Link>{" "}
+        ·{" "}
+        <Link href="/terms" className="underline hover:text-ink">
+          Terms of use
+        </Link>
+      </p>
     </div>
   );
 }

@@ -13,8 +13,8 @@ export async function GET() {
   const userId = session?.user?.id;
   if (!userId) return Response.json({ calls: [] }, { status: 401 });
 
-  const me = await prisma.user.findUnique({ where: { id: userId }, select: { emailVerified: true } });
-  if (!me?.emailVerified) return Response.json({ calls: [] });
+  const me = await prisma.user.findUnique({ where: { id: userId }, select: { emailVerified: true, suspendedAt: true } });
+  if (!me?.emailVerified || me.suspendedAt) return Response.json({ calls: [] });
 
   const now = Date.now();
   const calls = await prisma.call.findMany({
